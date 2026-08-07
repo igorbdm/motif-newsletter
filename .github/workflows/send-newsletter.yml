@@ -1,0 +1,52 @@
+name: Enviar Music Weekly
+
+on:
+  schedule:
+    - cron: "59 7 * * 1"
+      timezone: "America/Sao_Paulo"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: music-weekly-send
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    env:
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      EMAIL_DELIVERY_PROVIDER: kit
+      KIT_API_KEY: ${{ secrets.KIT_API_KEY }}
+      KIT_TAG_NAME: music-weekly
+      KIT_SENDER_EMAIL: oi@igorbdm.com
+      KIT_PUBLISH_TO_WEB: "false"
+      KIT_SEND_DELAY_MINUTES: "1"
+    steps:
+      - name: Baixar o projeto
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: python -m pip install -r requirements.txt
+
+      - name: Gerar e enviar newsletter
+        run: python src/main.py
+
+      - name: Salvar histórico de vídeos enviados
+        run: |
+          if git diff --quiet -- data/sent_videos.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sent_videos.json
+          git commit -m "chore: atualizar histórico da newsletter"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push

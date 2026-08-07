@@ -1,0 +1,4 @@
+.env
+newsletter.html
+__pycache__/
+*.py[cod]
