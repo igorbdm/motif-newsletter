@@ -1,5 +1,4 @@
 import os
-import re
 
 import requests
 
@@ -47,17 +46,24 @@ def fetch_playlist_page(playlist_id, page_token=None):
 
 def parse_duration(duration):
     """Converte uma duração ISO 8601 do YouTube em segundos."""
-    match = re.fullmatch(
-        r"P(?:\d+D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?",
-        duration,
-    )
+    total_seconds = 0
+    number = ""
 
-    if not match:
-        raise ValueError(f"Duração inválida: {duration}")
+    for char in duration[2:]:
+        if char.isdigit():
+            number += char
+            continue
 
-    hours, minutes, seconds = (int(value or 0) for value in match.groups())
+        if char == "H":
+            total_seconds += int(number) * 3600
+        elif char == "M":
+            total_seconds += int(number) * 60
+        elif char == "S":
+            total_seconds += int(number)
 
-    return hours * 3600 + minutes * 60 + seconds
+        number = ""
+
+    return total_seconds
 
 
 def fetch_video_durations(video_ids):
@@ -80,10 +86,20 @@ def fetch_video_durations(video_ids):
     response = requests.get(VIDEO_API_URL, params=params, timeout=30)
     response.raise_for_status()
 
-    return {
-        item["id"]: parse_duration(item["contentDetails"]["duration"])
-        for item in response.json().get("items", [])
-    }
+    durations = {}
+
+    for item in response.json().get("items", []):
+        content_details = item.get("contentDetails", {})
+        duration = content_details.get("duration")
+
+        # Alguns vídeos podem não retornar duração.
+        # Nesse caso, simplesmente não adicionamos o vídeo ao dicionário.
+        if not duration:
+            continue
+
+        durations[item["id"]] = parse_duration(duration)
+
+    return durations
 
 
 def get_feed(channel_name, config):
@@ -112,6 +128,7 @@ def get_feed(channel_name, config):
                 stop_paging = True
                 break
 
+            # Se "keep" estiver vazio, nenhum filtro positivo é aplicado.
             if config.get("keep") and not contains_any(title, config["keep"]):
                 continue
 
@@ -129,6 +146,8 @@ def get_feed(channel_name, config):
                 "video_id": video_id,
             })
 
+        # Só consulta a duração quando o canal possui um filtro mínimo.
+        # A consulta é feita em lote para evitar uma chamada por vídeo.
         if min_duration is not None and candidates:
             durations = fetch_video_durations(
                 [video["video_id"] for video in candidates]
