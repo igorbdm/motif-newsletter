@@ -21,7 +21,7 @@ jobs:
       EMAIL_DELIVERY_PROVIDER: kit
       KIT_API_KEY: ${{ secrets.KIT_API_KEY }}
       KIT_TAG_NAME: music-weekly
-      KIT_SENDER_EMAIL: oi@igorbdm.com
+      KIT_SENDER_EMAIL: newsletter@motifnewsletter.com
       KIT_PUBLISH_TO_WEB: "false"
       KIT_SEND_DELAY_MINUTES: "1"
     steps:
