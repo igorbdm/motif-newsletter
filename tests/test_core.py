@@ -26,6 +26,67 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(
             collector.get_uploads_playlist_id("UC3I2GFN_F8WudD_2jUZbojA"),
             "UU3I2GFN_F8WudD_2jUZbojA",
+
+                def test_parse_duration_converts_youtube_duration_to_seconds(self):
+        self.assertEqual(collector.parse_duration("PT10M"), 600)
+        self.assertEqual(collector.parse_duration("PT1H2M3S"), 3723)
+        self.assertEqual(collector.parse_duration("PT45S"), 45)
+
+    def test_parse_duration_rejects_invalid_duration(self):
+        with self.assertRaises(ValueError):
+            collector.parse_duration("10 minutes")
+
+    def test_get_feed_applies_minimum_duration(self):
+        recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        playlist_response = {
+            "items": [
+                {
+                    "snippet": {
+                        "title": "Short performance",
+                        "publishedAt": recent,
+                        "resourceId": {"videoId": "short"},
+                    }
+                },
+                {
+                    "snippet": {
+                        "title": "Long performance",
+                        "publishedAt": recent,
+                        "resourceId": {"videoId": "long"},
+                    }
+                },
+            ]
+        }
+
+        config = {
+            "id": "UC3I2GFN_F8WudD_2jUZbojA",
+            "keep": [],
+            "ignore": [],
+            "min_duration": 600,
+        }
+
+        with patch.object(
+            collector,
+            "fetch_playlist_page",
+            return_value=playlist_response,
+        ), patch.object(
+            collector,
+            "fetch_video_durations",
+            return_value={
+                "short": 599,
+                "long": 600,
+            },
+        ), patch.object(
+            collector,
+            "already_sent",
+            return_value=False,
+        ):
+            feed = collector.get_feed("Test Channel", config)
+
+        self.assertEqual(
+            [video["video_id"] for video in feed],
+            ["long"],
+        )
         )
 
 
