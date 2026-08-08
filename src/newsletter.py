@@ -3,7 +3,7 @@ from html import escape
 
 
 def generate_subject():
-    return f"Music Weekly — {datetime.now().strftime('%d/%m/%Y')}"
+    return f"Motif Newsletter — {datetime.now().strftime('%d/%m/%Y')}"
 
 
 def generate_html(videos):
@@ -23,7 +23,7 @@ def generate_html(videos):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Music Weekly</title>
+<title>Motif Newsletter</title>
 </head>
 <body style="margin:0; padding:0; background-color:{bg_page}; font-family: Georgia, 'Times New Roman', serif;">
 
@@ -40,7 +40,7 @@ def generate_html(videos):
         Edição de {today}
       </div>
       <div style="font-size:34px; font-weight:bold; color:{text_main}; margin-top:6px;">
-        🎵 Music Weekly
+        🎵 Motif Newsletter
       </div>
       <div style="width:60px; height:3px; background-color:{accent}; margin: 16px auto 0;"></div>
     </td>
@@ -95,7 +95,7 @@ def generate_html(videos):
         <tr>
           <td align="center" style="border-top: 1px dashed #d0cfc8; padding-top: 20px; font-family: Arial, sans-serif;">
             <div style="font-size:12px; color:{text_muted};">
-              Você recebeu este e-mail porque assina a Music Weekly 🎵
+              You received this email because you subscribe to the Motif Newsletter 🎵
             </div>
           </td>
         </tr>
