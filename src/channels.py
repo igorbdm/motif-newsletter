@@ -14,14 +14,17 @@ CHANNELS = {
         "keep": ["Full Session"],
         "ignore": [],
     },
-        "La Blogothèque (Take Away Shows)": {
+        "La Blogothèque": {
         "id": "UCFAKGci5lneha2x4XMbzYrQ",
-        "keep": ["A Take Away Show"],
+        "keep": [],
         "ignore": [],
+        "min_duration": 90,
     },
         "Cultura Livre": {
         "id": "UCBuFf6FSDclfDvRGJY1Q5Uw",
         "keep": ["CULTURA LIVRE"],
         "ignore": [],
+        "min_duration": 600,
+            
     },
 }
