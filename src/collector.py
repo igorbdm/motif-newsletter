@@ -1,4 +1,5 @@
 import os
+import re
 
 import requests
 
@@ -7,6 +8,7 @@ from utils import is_last_7_days, parse_date
 
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 API_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
+VIDEO_API_URL = "https://www.googleapis.com/youtube/v3/videos"
 
 
 def contains_any(text, terms):
@@ -43,8 +45,50 @@ def fetch_playlist_page(playlist_id, page_token=None):
     return response.json()
 
 
+def parse_duration(duration):
+    """Converte uma duração ISO 8601 do YouTube em segundos."""
+    match = re.fullmatch(
+        r"P(?:\d+D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?",
+        duration,
+    )
+
+    if not match:
+        raise ValueError(f"Duração inválida: {duration}")
+
+    hours, minutes, seconds = (int(value or 0) for value in match.groups())
+
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def fetch_video_durations(video_ids):
+    """Busca as durações de até 50 vídeos em uma única chamada à API."""
+    if not video_ids:
+        return {}
+
+    if not YOUTUBE_API_KEY:
+        raise RuntimeError(
+            "A variável YOUTUBE_API_KEY não foi configurada. "
+            "Veja o README para saber como criar e configurar a chave."
+        )
+
+    params = {
+        "part": "contentDetails",
+        "id": ",".join(video_ids),
+        "key": YOUTUBE_API_KEY,
+    }
+
+    response = requests.get(VIDEO_API_URL, params=params, timeout=30)
+    response.raise_for_status()
+
+    return {
+        item["id"]: parse_duration(item["contentDetails"]["duration"])
+        for item in response.json().get("items", [])
+    }
+
+
 def get_feed(channel_name, config):
     playlist_id = get_uploads_playlist_id(config["id"])
+    min_duration = config.get("min_duration")
 
     results = []
     page_token = None
@@ -53,6 +97,7 @@ def get_feed(channel_name, config):
         data = fetch_playlist_page(playlist_id, page_token)
 
         stop_paging = False
+        candidates = []
 
         for item in data.get("items", []):
             snippet = item["snippet"]
@@ -67,7 +112,7 @@ def get_feed(channel_name, config):
                 stop_paging = True
                 break
 
-            if not contains_any(title, config["keep"]):
+            if config.get("keep") and not contains_any(title, config["keep"]):
                 continue
 
             if contains_any(title, config.get("ignore", [])):
@@ -76,7 +121,7 @@ def get_feed(channel_name, config):
             if already_sent(video_id):
                 continue
 
-            results.append({
+            candidates.append({
                 "channel": channel_name,
                 "title": title,
                 "published": published,
@@ -84,9 +129,26 @@ def get_feed(channel_name, config):
                 "video_id": video_id,
             })
 
+        if min_duration is not None and candidates:
+            durations = fetch_video_durations(
+                [video["video_id"] for video in candidates]
+            )
+
+            candidates = [
+                video
+                for video in candidates
+                if durations.get(video["video_id"], 0) >= min_duration
+            ]
+
+        results.extend(candidates)
+
         page_token = data.get("nextPageToken")
 
         if stop_paging or not page_token:
             break
 
-    return sorted(results, key=lambda video: parse_date(video["published"]), reverse=True)
+    return sorted(
+        results,
+        key=lambda video: parse_date(video["published"]),
+        reverse=True,
+    )
