@@ -1,4 +1,4 @@
-# Music Weekly
+# Motif Newsletter
 
 Uma newsletter semanal, simples, com apresentações musicais completas publicadas no YouTube.
 
