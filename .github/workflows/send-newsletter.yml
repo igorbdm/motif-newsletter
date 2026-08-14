@@ -2,7 +2,7 @@ name: Enviar Music Weekly
 
 on:
   schedule:
-    - cron: "59 7 * * 1"
+    - cron: "45 23 * * 4"
       timezone: "America/Sao_Paulo"
   workflow_dispatch:
 
