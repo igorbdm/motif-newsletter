@@ -2,7 +2,7 @@ name: Enviar Music Weekly
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "32 13 * * 5"
   workflow_dispatch:
 
 permissions:
