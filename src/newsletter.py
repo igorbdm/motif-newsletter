@@ -3,8 +3,8 @@ from html import escape
 
 
 def generate_subject():
-    return f"Motif Newsletter — {datetime.now().strftime('%B %d, %Y')}"
-
+    return f"A Week in Music · {datetime.now().strftime('%B %d, %Y')}"
+    
 
 def generate_html(videos):
     today = datetime.now().strftime("%B %d, %Y")
@@ -110,6 +110,9 @@ def generate_html(videos):
             <div class="header-logo" style="font-family:'Montserrat', Arial, sans-serif; font-size:48px; line-height:1; font-weight:700; letter-spacing:-3px; color:#000000;">
               motif.
             </div>
+            <div style="padding-top:8px; color:#000000; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4; letter-spacing:normal; word-spacing:normal; white-space:normal;">
+              Good Music for Good People.
+            </div>
           </td>
         </tr>
       </table>
@@ -130,8 +133,6 @@ def generate_html(videos):
 
         <tr>
           <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
-            Good Music for Good People.<br>
-            <br>
             A weekly gathering of performances published across the channels we follow.
           </td>
         </tr>
@@ -193,6 +194,27 @@ def generate_html(videos):
 """
 
     html += f"""
+  <!-- SHARE / SIGNUP -->
+  <tr>
+    <td class="espacamento-lateral" style="padding:0 32px 25px; padding-left:32px; padding-right:32px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" style="border-collapse:separate; background:#f7f7f5;">
+        <tr>
+          <td style="padding:24px 24px 25px; font-family:'Montserrat', Arial, sans-serif; color:#000000;">
+            <div style="font-weight:bold; font-size:14px; line-height:1.4; padding-bottom:8px;">
+              Know someone who might enjoy this?
+            </div>
+            <div style="font-size:13px; line-height:1.5; padding-bottom:14px;">
+              Forward Motif to them. If you found this newsletter through someone else, you can join us here.
+            </div>
+            <a href="https://motifnewsletter.com" target="_blank" style="color:#000000; text-decoration:underline; font-size:13px; line-height:1.5;">
+              Subscribe to Motif →
+            </a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
   <!-- FOOTER -->
   <tr>
     <td class="espacamento-lateral" style="padding:15px 32px 30px;">
