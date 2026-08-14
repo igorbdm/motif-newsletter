@@ -51,7 +51,7 @@ class KitNewsletterSender:
             "send_at": send_at.isoformat(),
             "thumbnail_alt": None,
             "thumbnail_url": None,
-            "preview_text": "What showed up last week in the world of live music",
+            "preview_text": "What showed up this week in the world of live music",
             "subject": subject,
             "subscriber_filter": [
                 {"all": [{"type": "tag", "ids": [tag_id]}], "any": None, "none": None}
