@@ -7,48 +7,137 @@ def generate_subject():
 
 
 def generate_html(videos):
-    today = datetime.now().strftime("%d/%m/%Y")
+    today = datetime.now().strftime("%B %d, %Y")
 
     # Paleta / estilo
-    bg_page = "#f0f0f0"
+    bg_page = "#ffffff"
     bg_card = "#ffffff"
-    accent = "#e63946"
-    channel_color = "#3a3f44"
-    text_main = "#333333"
+    accent = "#f23809"
+    channel_color = "#000000"
+    text_main = "#000000"
     text_muted = "#6b6b6b"
 
     html = f"""
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Motif Newsletter</title>
+
+<style type="text/css">
+    @font-face {{
+        font-family: 'Montserrat';
+        font-style: normal;
+        font-weight: 400;
+        src: url('https://fonts.gstatic.com/s/montserrat/v13/JTUSjIg1_i6t8kCHKm459WRhyyTh89ZNpQ.woff2') format('woff2');
+    }}
+
+    @font-face {{
+        font-family: 'Montserrat';
+        font-style: normal;
+        font-weight: 700;
+        src: url('https://fonts.gstatic.com/s/montserrat/v13/JTURjIg1_i6t8kCHKm45_dJE3gTD_vx3rCubqg.woff2') format('woff2');
+    }}
+
+    body {{
+        margin: 0;
+        padding: 0;
+        background-color: #ffffff;
+        font-family: 'Montserrat', Arial, sans-serif;
+    }}
+
+    .body_table {{
+        border-left: 5px solid #f23809;
+        background: #ffffff;
+    }}
+
+    .espacamento-lateral {{
+        padding-left: 32px;
+        padding-right: 32px;
+    }}
+
+    .header {{
+        padding: 52px 0 45px 32px;
+    }}
+
+    .header-logo {{
+        font-family: 'Montserrat', Arial, sans-serif;
+        font-size: 48px;
+        line-height: 1;
+        font-weight: 700;
+        letter-spacing: -3px;
+        color: #000000;
+    }}
+
+    .section-header {{
+        border-top: 2px solid #000000;
+        padding-top: 20px;
+    }}
+
+    @media (min-width: 768px) {{
+        .body_table {{
+            border-left: 8px solid #f23809;
+        }}
+
+        .espacamento-lateral {{
+            padding-left: 78px;
+            padding-right: 78px;
+        }}
+
+        .header {{
+            padding: 82px 0 71px 78px;
+        }}
+    }}
+</style>
+
 </head>
-<body style="margin:0; padding:0; background-color:{bg_page}; font-family: Georgia, 'Times New Roman', serif;">
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:{bg_page};">
+<body style="margin:0; background-color:{bg_page};">
+
+<table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="center" border="0" style="max-width:650px; background:#fff;">
 <tr>
-<td align="center" style="padding: 32px 16px;">
+<td>
 
-<table role="presentation" width="100%" style="max-width:640px;" cellpadding="0" cellspacing="0">
+<table role="presentation" class="body_table" cellspacing="0" cellpadding="0" width="100%" align="center" border="0" style="background:#fff; border-left:5px solid {accent};">
 
-  <!-- Cabeçalho -->
+  <!-- HEADER -->
   <tr>
-    <td align="center" style="padding-bottom: 24px;">
-      <div style="font-size:13px; letter-spacing:2px; text-transform:uppercase; color:{text_muted}; font-family: Arial, sans-serif;">
-        Edição de {today}
-      </div>
-      <div style="font-size:34px; font-weight:bold; color:{text_main}; margin-top:6px;">
-        🎵 Motif Newsletter
-      </div>
-      <div style="width:60px; height:3px; background-color:{accent}; margin: 16px auto 0;"></div>
+    <td>
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" class="header" style="padding:52px 0 45px 32px;">
+        <tr>
+          <td>
+            <div class="header-logo" style="font-family:'Montserrat', Arial, sans-serif; font-size:48px; line-height:1; font-weight:700; letter-spacing:-3px; color:#000000;">
+              motif.
+            </div>
+          </td>
+        </tr>
+      </table>
     </td>
   </tr>
 
-  <!-- Conteúdo -->
+  <!-- INTRO -->
   <tr>
-    <td style="background-color:{bg_card}; border-radius:8px; padding: 8px 32px 24px;">
+    <td class="espacamento-lateral" style="padding-bottom:25px; padding-left:32px; padding-right:32px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0">
+        <tr>
+          <td>
+            <span style="font-weight:bold; text-transform:uppercase; color:{accent}; font-family:'Montserrat', Arial, sans-serif; font-size:14px;">
+              {today}
+            </span>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
+            Good Music for Good People.<br>
+            <br>
+            A weekly gathering of performances published across the channels we follow.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
 """
 
     current_channel = None
@@ -60,43 +149,58 @@ def generate_html(videos):
 
         if video["channel"] != current_channel:
             current_channel = video["channel"]
+
             html += f"""
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 28px;">
+  <!-- CHANNEL HEADER -->
+  <tr>
+    <td class="espacamento-lateral" style="padding-bottom:25px; padding-left:32px; padding-right:32px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" class="section-header" style="border-top:2px solid #000000; padding-top:20px;">
         <tr>
-          <td style="border-bottom: 1px solid #eaeaea; padding-bottom: 6px;">
-            <span style="font-family: Arial, sans-serif; font-size:12px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:{channel_color};">
+          <td>
+            <span style="font-weight:bold; color:{channel_color}; font-family:'Montserrat', Arial, sans-serif; font-size:20px;">
               {channel}
             </span>
           </td>
         </tr>
       </table>
+    </td>
+  </tr>
 """
 
         html += f"""
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <!-- VIDEO -->
+  <tr>
+    <td class="espacamento-lateral" style="padding-bottom:25px; padding-left:32px; padding-right:32px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0">
         <tr>
-          <td style="padding: 14px 0; border-bottom: 1px solid #f0f0f0;">
-            <a href="{link}" style="font-family: Arial, sans-serif; font-size:15px; color:{text_main}; text-decoration:none; line-height:1.5;">
-              ▸ {title}
+          <td>
+            <div style="font-weight:bold; color:{accent}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
+              {title}
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
+            <a href="{link}" target="_blank" style="color:#000000; text-decoration:underline;">
+              Watch performance →
             </a>
           </td>
         </tr>
       </table>
+    </td>
+  </tr>
 """
 
     html += f"""
-    </td>
-  </tr>
-
-  <!-- Separador entre a newsletter e o rodapé padrão do Kit -->
+  <!-- FOOTER -->
   <tr>
-    <td style="padding: 32px 0 8px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+    <td class="espacamento-lateral" style="padding:15px 32px 30px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" style="border-top:2px solid #000000; padding-top:20px;">
         <tr>
-          <td align="center" style="border-top: 1px dashed #d0cfc8; padding-top: 20px; font-family: Arial, sans-serif;">
-            <div style="font-size:12px; color:{text_muted};">
-              You received this email because you subscribe to the Motif Newsletter 🎵
-            </div>
+          <td style="font-family:'Montserrat', Arial, sans-serif; font-size:12px; line-height:1.5; color:{text_muted};">
+            You received this email because you subscribe to the Motif Newsletter.<br>
+            Good Music for Good People.
           </td>
         </tr>
       </table>
