@@ -3,7 +3,7 @@ from html import escape
 
 
 def generate_subject():
-    return f"Motif Newsletter — {datetime.now().strftime('%d/%m/%Y')}"
+    return f"Motif Newsletter — {datetime.now().strftime('%B %d, %Y')}"
 
 
 def generate_html(videos):
