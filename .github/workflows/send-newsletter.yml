@@ -2,7 +2,9 @@ name: Enviar Music Weekly
 
 on:
   schedule:
-    - cron: "32 13 * * 5"
+    # Sexta-feira, das 10:07 às 12:52 (Brasília), a cada 15 minutos.
+    # Várias oportunidades reduzem o risco de uma execução de schedule perdida.
+    - cron: "7,22,37,52 13-15 * * 5"
   workflow_dispatch:
 
 permissions:

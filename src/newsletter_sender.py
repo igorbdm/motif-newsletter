@@ -7,7 +7,7 @@ from subscribers import SubscriberProvider
 class NewsletterSender(Protocol):
     """Entrega uma edição sem expor o fluxo principal ao provedor escolhido."""
 
-    def send(self, subject: str, html: str) -> None:
+    def send(self, subject: str, html: str, edition_key=None, video_ids=None) -> bool:
         """Aceita a edição para envio ou lança uma exceção."""
 
 
@@ -18,6 +18,7 @@ class SmtpNewsletterSender:
         self.email_provider = email_provider
         self.subscriber_provider = subscriber_provider
 
-    def send(self, subject: str, html: str) -> None:
+    def send(self, subject: str, html: str, edition_key=None, video_ids=None) -> bool:
         recipients = self.subscriber_provider.get_recipients()
         self.email_provider.send(subject, html, recipients)
+        return True

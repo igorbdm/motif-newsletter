@@ -71,7 +71,9 @@ Por enquanto, `EMAIL_TO` aceita um endereço (como antes) ou uma lista separada 
 
 ## GitHub Actions
 
-O workflow inicia a preparação às 07:59 de segunda-feira no horário de Brasília e agenda o envio no Kit para 08:00. Ele também pode ser iniciado manualmente pela aba **Actions**. Antes de ativá-lo, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`. Após o Kit aceitar a campanha, o workflow cria um commit com o histórico atualizado.
+O workflow tenta executar a edição várias vezes às sextas-feiras, entre 10:07 e 12:52 no horário de Brasília. Isso existe porque o gatilho `schedule` do GitHub pode atrasar ou não disparar uma execução individual. A aplicação é idempotente: cada edição tem uma identificação própria no Kit e uma segunda tentativa não cria um segundo broadcast para o mesmo conteúdo.
+
+O workflow também pode ser iniciado manualmente pela aba **Actions**. Antes de ativá-lo, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`. Após o Kit aceitar a campanha (ou confirmar que ela já existe), o workflow atualiza o histórico local dos vídeos.
 
 ## Adicionar ou ajustar canais
 

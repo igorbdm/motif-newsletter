@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -6,6 +7,7 @@ from urllib.request import Request, urlopen
 
 
 API_BASE_URL = "https://api.kit.com/v4"
+BROADCAST_DESCRIPTION_PREFIX = "Motif Weekly | edition="
 
 
 class KitNewsletterSender:
@@ -34,8 +36,30 @@ class KitNewsletterSender:
             send_delay_minutes=int(os.getenv("KIT_SEND_DELAY_MINUTES", "1")),
         )
 
-    def send(self, subject: str, html: str) -> None:
+    def send(self, subject: str, html: str, edition_key: str, video_ids) -> bool:
+        """Cria o broadcast uma única vez para a edição/conjunto de vídeos.
+
+        Retorna True quando criou um novo broadcast e False quando a mesma edição
+        já existe no Kit e pode ser considerada concluída com segurança.
+        """
         tag_id = self._find_tag_id()
+        description = self._build_description(edition_key, video_ids)
+
+        existing = self._find_edition_broadcast(edition_key)
+        matching = [broadcast for broadcast in existing if broadcast.get("description") == description]
+        if matching:
+            print(
+                f"A edição {edition_key} já existe no Kit (broadcast {matching[0].get('id')}). "
+                "Nenhum novo broadcast será criado."
+            )
+            return False
+
+        if existing:
+            raise RuntimeError(
+                f"Já existe um broadcast da edição {edition_key} no Kit, mas com outro conteúdo. "
+                "O envio foi interrompido para evitar duplicidade ou perda de conteúdo."
+            )
+
         now = datetime.now(timezone.utc)
         send_at = (now + timedelta(minutes=self.send_delay_minutes)).replace(second=0, microsecond=0)
 
@@ -45,7 +69,7 @@ class KitNewsletterSender:
         payload = {
             "email_address": self.sender_email,
             "content": html,
-            "description": f"Music Weekly — {subject}",
+            "description": description,
             "public": self.publish_to_web,
             "published_at": send_at.isoformat() if self.publish_to_web else None,
             "send_at": send_at.isoformat(),
@@ -59,6 +83,32 @@ class KitNewsletterSender:
         }
 
         self._request("POST", "/broadcasts", payload)
+        return True
+
+    @staticmethod
+    def _build_description(edition_key: str, video_ids) -> str:
+        normalized_ids = sorted(set(video_ids))
+        fingerprint = hashlib.sha256("\n".join(normalized_ids).encode("utf-8")).hexdigest()[:16]
+        return f"{BROADCAST_DESCRIPTION_PREFIX}{edition_key} | videos={fingerprint}"
+
+    def _find_edition_broadcast(self, edition_key):
+        path = "/broadcasts?per_page=1000"
+        matches = []
+        prefix = f"{BROADCAST_DESCRIPTION_PREFIX}{edition_key} |"
+
+        while path:
+            response = self._request("GET", path)
+
+            for broadcast in response.get("broadcasts", []):
+                description = broadcast.get("description") or ""
+                if description.startswith(prefix):
+                    matches.append(broadcast)
+
+            pagination = response.get("pagination", {})
+            cursor = pagination.get("end_cursor")
+            path = f"/broadcasts?per_page=1000&after={cursor}" if pagination.get("has_next_page") and cursor else None
+
+        return matches
 
     def _find_tag_id(self):
         path = "/tags?per_page=1000"

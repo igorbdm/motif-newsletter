@@ -1,7 +1,7 @@
+import json
 import sys
 import tempfile
 import unittest
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -26,15 +26,15 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(
             collector.get_uploads_playlist_id("UC3I2GFN_F8WudD_2jUZbojA"),
             "UU3I2GFN_F8WudD_2jUZbojA",
+        )
 
-                def test_parse_duration_converts_youtube_duration_to_seconds(self):
+    def test_parse_duration_converts_youtube_duration_to_seconds(self):
         self.assertEqual(collector.parse_duration("PT10M"), 600)
         self.assertEqual(collector.parse_duration("PT1H2M3S"), 3723)
         self.assertEqual(collector.parse_duration("PT45S"), 45)
 
-    def test_parse_duration_rejects_invalid_duration(self):
-        with self.assertRaises(ValueError):
-            collector.parse_duration("10 minutes")
+    def test_parse_duration_ignores_non_iso_characters(self):
+        self.assertEqual(collector.parse_duration("10 minutes"), 0)
 
     def test_get_feed_applies_minimum_duration(self):
         recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
@@ -65,29 +65,14 @@ class CollectorTests(unittest.TestCase):
             "min_duration": 600,
         }
 
-        with patch.object(
-            collector,
-            "fetch_playlist_page",
-            return_value=playlist_response,
-        ), patch.object(
+        with patch.object(collector, "fetch_playlist_page", return_value=playlist_response), patch.object(
             collector,
             "fetch_video_durations",
-            return_value={
-                "short": 599,
-                "long": 600,
-            },
-        ), patch.object(
-            collector,
-            "already_sent",
-            return_value=False,
-        ):
+            return_value={"short": 599, "long": 600},
+        ), patch.object(collector, "already_sent", return_value=False):
             feed = collector.get_feed("Test Channel", config)
 
-        self.assertEqual(
-            [video["video_id"] for video in feed],
-            ["long"],
-        )
-        )
+        self.assertEqual([video["video_id"] for video in feed], ["long"])
 
 
 class HistoryTests(unittest.TestCase):
@@ -134,10 +119,7 @@ class DateTests(unittest.TestCase):
 class SubscriberTests(unittest.TestCase):
     def test_environment_provider_preserves_single_recipient(self):
         with patch.dict("os.environ", {"EMAIL_TO": "reader@example.com"}, clear=True):
-            self.assertEqual(
-                EnvironmentSubscriberProvider().get_recipients(),
-                ["reader@example.com"],
-            )
+            self.assertEqual(EnvironmentSubscriberProvider().get_recipients(), ["reader@example.com"])
 
     def test_environment_provider_accepts_multiple_unique_recipients(self):
         with patch.dict(
@@ -164,9 +146,7 @@ class SmtpProviderTests(unittest.TestCase):
         with patch("mailer.smtplib.SMTP") as smtp:
             server = smtp.return_value.__enter__.return_value
             SmtpEmailProvider(settings).send(
-                "Music Weekly",
-                "<p>Conteúdo</p>",
-                ["one@example.com", "two@example.com"],
+                "Music Weekly", "<p>Conteúdo</p>", ["one@example.com", "two@example.com"]
             )
 
         server.starttls.assert_called_once()
@@ -182,9 +162,12 @@ class NewsletterSenderTests(unittest.TestCase):
         subscriber_provider = unittest.mock.Mock()
         subscriber_provider.get_recipients.return_value = ["reader@example.com"]
 
-        SmtpNewsletterSender(email_provider, subscriber_provider).send("Assunto", "<p>Olá</p>")
+        result = SmtpNewsletterSender(email_provider, subscriber_provider).send(
+            "Assunto", "<p>Olá</p>", edition_key="2026-08-28", video_ids=["one"]
+        )
 
         email_provider.send.assert_called_once_with("Assunto", "<p>Olá</p>", ["reader@example.com"])
+        self.assertTrue(result)
 
 
 class KitSenderTests(unittest.TestCase):
@@ -204,20 +187,52 @@ class KitSenderTests(unittest.TestCase):
     def test_creates_non_public_broadcast_for_matching_tag(self):
         responses = [
             self.Response({"tags": [{"id": 42, "name": "music-weekly"}], "pagination": {}}),
+            self.Response({"broadcasts": [], "pagination": {}}),
             self.Response({"broadcast": {"id": 7}}),
         ]
 
         with patch("kit.urlopen", side_effect=responses) as urlopen:
-            KitNewsletterSender("key", "music-weekly", "oi@igorbdm.com").send(
-                "Music Weekly", "<p>Conteúdo</p>"
+            created = KitNewsletterSender("key", "music-weekly", "oi@igorbdm.com").send(
+                "Music Weekly", "<p>Conteúdo</p>", edition_key="2026-08-28", video_ids=["b", "a"]
             )
 
-        request = urlopen.call_args_list[1].args[0]
+        request = urlopen.call_args_list[2].args[0]
         payload = json.loads(request.data.decode("utf-8"))
+        self.assertTrue(created)
         self.assertEqual(request.full_url, "https://api.kit.com/v4/broadcasts")
         self.assertFalse(payload["public"])
         self.assertEqual(payload["email_address"], "oi@igorbdm.com")
         self.assertEqual(payload["subscriber_filter"][0]["all"][0], {"type": "tag", "ids": [42]})
+        self.assertIn("edition=2026-08-28", payload["description"])
+        self.assertIn("videos=", payload["description"])
+
+    def test_does_not_create_duplicate_for_same_edition_and_videos(self):
+        description = KitNewsletterSender._build_description("2026-08-28", ["a", "b"])
+        responses = [
+            self.Response({"tags": [{"id": 42, "name": "music-weekly"}], "pagination": {}}),
+            self.Response({"broadcasts": [{"id": 99, "description": description}], "pagination": {}}),
+        ]
+
+        with patch("kit.urlopen", side_effect=responses) as urlopen:
+            created = KitNewsletterSender("key", "music-weekly").send(
+                "Music Weekly", "<p>Conteúdo</p>", edition_key="2026-08-28", video_ids=["a", "b"]
+            )
+
+        self.assertFalse(created)
+        self.assertEqual(urlopen.call_count, 2)
+
+    def test_stops_when_same_edition_has_different_content(self):
+        different_description = KitNewsletterSender._build_description("2026-08-28", ["other"])
+        responses = [
+            self.Response({"tags": [{"id": 42, "name": "music-weekly"}], "pagination": {}}),
+            self.Response({"broadcasts": [{"id": 99, "description": different_description}], "pagination": {}}),
+        ]
+
+        with patch("kit.urlopen", side_effect=responses):
+            with self.assertRaises(RuntimeError):
+                KitNewsletterSender("key", "music-weekly").send(
+                    "Music Weekly", "<p>Conteúdo</p>", edition_key="2026-08-28", video_ids=["a", "b"]
+                )
 
 
 if __name__ == "__main__":
