@@ -1,5 +1,6 @@
 import os
 
+from environment import get_audience_tag
 from kit import KitNewsletterSender
 from mailer import SmtpEmailProvider
 from newsletter_sender import NewsletterSender, SmtpNewsletterSender
@@ -16,7 +17,7 @@ def get_newsletter_sender() -> NewsletterSender:
     provider = os.getenv("EMAIL_DELIVERY_PROVIDER", "smtp").casefold()
 
     if provider == "kit":
-        return KitNewsletterSender.from_environment()
+        return KitNewsletterSender.from_environment(tag_name=get_audience_tag())
 
     if provider == "smtp":
         return SmtpNewsletterSender(SmtpEmailProvider(), get_subscriber_provider())

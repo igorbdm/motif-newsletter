@@ -46,6 +46,9 @@ def fetch_playlist_page(playlist_id, page_token=None):
 
 def parse_duration(duration):
     """Converte uma duração ISO 8601 do YouTube em segundos."""
+    if not duration.startswith("PT"):
+        raise ValueError(f"Duração ISO 8601 inválida: {duration}")
+
     total_seconds = 0
     number = ""
 
@@ -54,14 +57,20 @@ def parse_duration(duration):
             number += char
             continue
 
+        if not number or char not in "HMS":
+            raise ValueError(f"Duração ISO 8601 inválida: {duration}")
+
         if char == "H":
             total_seconds += int(number) * 3600
         elif char == "M":
             total_seconds += int(number) * 60
-        elif char == "S":
+        else:
             total_seconds += int(number)
 
         number = ""
+
+    if number:
+        raise ValueError(f"Duração ISO 8601 inválida: {duration}")
 
     return total_seconds
 
