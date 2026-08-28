@@ -1,8 +1,4 @@
-from datetime import datetime, timedelta, timezone
-
-
-def is_last_7_days(date_string):
-    return parse_date(date_string) >= datetime.now(timezone.utc) - timedelta(days=7)
+from datetime import datetime, timezone
 
 
 def parse_date(date_string):

@@ -1,5 +1,4 @@
 import sys
-import tempfile
 import unittest
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -11,12 +10,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from environment import get_audience_tag, get_runtime_branch
 
 import collector
-import history
 from kit import KitNewsletterSender
 from mailer import SmtpEmailProvider
 from newsletter_sender import SmtpNewsletterSender
 from subscribers import EnvironmentSubscriberProvider
-from utils import is_last_7_days
+from utils import parse_date
 
 
 class CollectorTests(unittest.TestCase):
@@ -79,10 +77,6 @@ class CollectorTests(unittest.TestCase):
                 "short": 599,
                 "long": 600,
             },
-        ), patch.object(
-            collector,
-            "already_sent",
-            return_value=False,
         ):
             feed = collector.get_feed("Test Channel", config)
 
@@ -90,38 +84,6 @@ class CollectorTests(unittest.TestCase):
             [video["video_id"] for video in feed],
             ["long"],
         )
-
-
-class HistoryTests(unittest.TestCase):
-    def test_marks_multiple_videos_without_duplicates(self):
-        with tempfile.TemporaryDirectory() as directory:
-            temporary_file = Path(directory) / "sent_videos.json"
-
-            with patch.object(history, "HISTORY_FILE", temporary_file):
-                now = datetime.now(timezone.utc).isoformat()
-                videos = [
-                    {"video_id": "one", "published": now},
-                    {"video_id": "two", "published": now},
-                    {"video_id": "one", "published": now},
-                ]
-                history.mark_as_sent(videos)
-                self.assertTrue(history.already_sent("one"))
-                self.assertTrue(history.already_sent("two"))
-                self.assertFalse(history.already_sent("three"))
-
-    def test_prunes_entries_older_than_7_days(self):
-        with tempfile.TemporaryDirectory() as directory:
-            temporary_file = Path(directory) / "sent_videos.json"
-
-            with patch.object(history, "HISTORY_FILE", temporary_file):
-                old = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
-                recent = datetime.now(timezone.utc).isoformat()
-
-                history.save_history({"old_video": old})
-                history.mark_as_sent([{"video_id": "new_video", "published": recent}])
-
-                self.assertFalse(history.already_sent("old_video"))
-                self.assertTrue(history.already_sent("new_video"))
 
 
 class EnvironmentTests(unittest.TestCase):
@@ -141,12 +103,53 @@ class EnvironmentTests(unittest.TestCase):
 
 
 class DateTests(unittest.TestCase):
-    def test_accepts_recent_and_rejects_old_dates(self):
-        recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-        old = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    def test_collection_start_is_previous_friday_at_midnight(self):
+        from main import get_collection_start
 
-        self.assertTrue(is_last_7_days(recent))
-        self.assertFalse(is_last_7_days(old))
+        start = get_collection_start(date(2026, 8, 28))
+
+        self.assertEqual(start.isoformat(), "2026-08-21T00:00:00-03:00")
+
+    def test_get_feed_stops_at_previous_edition_boundary(self):
+        boundary = "2026-08-21T00:00:00+00:00"
+        newer = "2026-08-22T10:00:00+00:00"
+
+        playlist_response = {
+            "items": [
+                {
+                    "snippet": {
+                        "title": "New video",
+                        "publishedAt": newer,
+                        "resourceId": {"videoId": "new"},
+                    }
+                },
+                {
+                    "snippet": {
+                        "title": "Boundary video",
+                        "publishedAt": boundary,
+                        "resourceId": {"videoId": "boundary"},
+                    }
+                },
+                {
+                    "snippet": {
+                        "title": "Older video",
+                        "publishedAt": "2026-08-20T23:00:00+00:00",
+                        "resourceId": {"videoId": "old"},
+                    }
+                },
+            ]
+        }
+
+        config = {
+            "id": "UC3I2GFN_F8WudD_2jUZbojA",
+            "keep": [],
+            "ignore": [],
+        }
+
+        with patch.object(collector, "fetch_playlist_page", return_value=playlist_response):
+            feed = collector.get_feed("Test Channel", config, since=parse_date(boundary))
+
+        self.assertEqual([video["video_id"] for video in feed], ["new"])
 
     def test_edition_date_is_friday(self):
         from main import get_edition_date
@@ -154,6 +157,29 @@ class DateTests(unittest.TestCase):
         self.assertEqual(get_edition_date(date(2026, 8, 28)), date(2026, 8, 28))
         self.assertEqual(get_edition_date(date(2026, 8, 27)), date(2026, 8, 28))
         self.assertEqual(get_edition_date(date(2026, 8, 29)), date(2026, 9, 4))
+
+    def test_main_collects_from_previous_edition_start(self):
+        import main
+
+        calls = []
+        sender = unittest.mock.Mock()
+        sender.send.return_value = "created"
+
+        with patch.object(main, "get_edition_date", return_value=date(2026, 8, 28)), \
+            patch.object(main, "get_newsletter_sender", return_value=sender), \
+            patch.object(main, "get_feed", side_effect=lambda name, config, since=None: calls.append(since) or [{
+                "channel": name,
+                "title": "Video",
+                "published": "2026-08-22T10:00:00Z",
+                "link": "https://www.youtube.com/watch?v=video",
+                "video_id": "video",
+            }]), \
+            patch.object(main, "generate_html", return_value="<p>Conteúdo</p>"):
+            main.main()
+
+        self.assertEqual(len(calls), len(main.CHANNELS))
+        self.assertTrue(all(value.isoformat() == "2026-08-21T00:00:00-03:00" for value in calls))
+        sender.send.assert_called_once()
 
     def test_subject_uses_edition_date(self):
         from newsletter import generate_subject

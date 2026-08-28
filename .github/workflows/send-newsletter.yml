@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: music-weekly-send
@@ -60,15 +60,3 @@ jobs:
 
       - name: Gerar e enviar newsletter
         run: python src/main.py
-
-      - name: Salvar histórico de vídeos enviados
-        run: |
-          if git diff --quiet -- data/sent_videos.json; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/sent_videos.json
-          git commit -m "chore: atualizar histórico da newsletter"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push

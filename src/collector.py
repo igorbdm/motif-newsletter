@@ -2,8 +2,7 @@ import os
 
 import requests
 
-from history import already_sent
-from utils import is_last_7_days, parse_date
+from utils import parse_date
 
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 API_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
@@ -111,7 +110,7 @@ def fetch_video_durations(video_ids):
     return durations
 
 
-def get_feed(channel_name, config):
+def get_feed(channel_name, config, since=None):
     playlist_id = get_uploads_playlist_id(config["id"])
     min_duration = config.get("min_duration")
 
@@ -131,9 +130,9 @@ def get_feed(channel_name, config):
             video_id = snippet["resourceId"]["videoId"]
 
             # A playlist de uploads vem sempre do vídeo mais recente para o
-            # mais antigo. Assim que encontramos um vídeo fora dos últimos 7
-            # dias, todos os próximos também estarão fora, então paramos.
-            if not is_last_7_days(published):
+            # mais antigo. Quando encontramos um vídeo anterior ao início da
+            # edição, todos os próximos também estarão fora da janela.
+            if since is not None and parse_date(published) <= since:
                 stop_paging = True
                 break
 
@@ -142,9 +141,6 @@ def get_feed(channel_name, config):
                 continue
 
             if contains_any(title, config.get("ignore", [])):
-                continue
-
-            if already_sent(video_id):
                 continue
 
             candidates.append({

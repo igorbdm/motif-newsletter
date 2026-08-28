@@ -4,7 +4,7 @@ Uma newsletter semanal, simples, com apresentações musicais completas publicad
 
 O projeto usa a YouTube Data API v3 para ler os uploads de cada canal, seleciona os vídeos desejados e envia um e-mail em HTML.
 
-> Antes usava os feeds RSS públicos do YouTube, mas esse feed só retorna os 15 uploads mais recentes de cada canal, então vídeos podiam ficar de fora quando um canal postava bastante coisa na semana. A API resolve isso porque permite paginar e buscar todos os uploads dos últimos 7 dias, não só os 15 mais recentes.
+> Antes usava os feeds RSS públicos do YouTube, mas esse feed só retorna os 15 uploads mais recentes de cada canal, então vídeos podiam ficar de fora quando um canal postava bastante coisa na semana. A API resolve isso porque permite paginar e buscar todos os uploads desde a última edição semanal, não só os 15 mais recentes.
 
 ## Como funciona
 
@@ -12,7 +12,7 @@ O projeto usa a YouTube Data API v3 para ler os uploads de cada canal, seleciona
 2. Para cada canal, busca os uploads recentes via YouTube Data API.
 3. Mantém títulos que contenham alguma palavra em `keep` e descarta os que contenham uma palavra em `ignore`.
 4. Considera apenas vídeos publicados nos últimos sete dias que ainda não foram enviados.
-5. Gera o e-mail, verifica no Kit se a edição daquela sexta-feira já possui um Broadcast e só cria um novo Broadcast quando não existe outro ativo. O histórico de vídeos é atualizado quando uma execução confirma que a edição foi enviada.
+5. Gera o e-mail, verifica no Kit se a edição daquela sexta-feira já possui um Broadcast e só cria um novo Broadcast quando não existe outro ativo. A seleção de vídeos é baseada na janela semanal desde a edição anterior.
 
 ## Configuração da API do YouTube
 
@@ -57,7 +57,7 @@ Depois de definir as configurações de e-mail e da API do YouTube, execute:
 python3 src/main.py
 ```
 
-O arquivo `newsletter.html` também é criado localmente como uma cópia para conferência. Se o envio falhar, nenhum vídeo é adicionado ao histórico.
+O arquivo `newsletter.html` também é criado localmente como uma cópia para conferência antes do envio.
 
 ## Arquitetura de envio
 
