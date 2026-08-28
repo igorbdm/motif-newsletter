@@ -2,8 +2,7 @@ import os
 
 import requests
 
-from history import already_sent
-from utils import is_last_7_days, parse_date
+from utils import parse_date
 
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 API_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
@@ -46,6 +45,9 @@ def fetch_playlist_page(playlist_id, page_token=None):
 
 def parse_duration(duration):
     """Converte uma duração ISO 8601 do YouTube em segundos."""
+    if not duration.startswith("PT"):
+        raise ValueError(f"Duração ISO 8601 inválida: {duration}")
+
     total_seconds = 0
     number = ""
 
@@ -54,14 +56,20 @@ def parse_duration(duration):
             number += char
             continue
 
+        if not number or char not in "HMS":
+            raise ValueError(f"Duração ISO 8601 inválida: {duration}")
+
         if char == "H":
             total_seconds += int(number) * 3600
         elif char == "M":
             total_seconds += int(number) * 60
-        elif char == "S":
+        else:
             total_seconds += int(number)
 
         number = ""
+
+    if number:
+        raise ValueError(f"Duração ISO 8601 inválida: {duration}")
 
     return total_seconds
 
@@ -102,7 +110,7 @@ def fetch_video_durations(video_ids):
     return durations
 
 
-def get_feed(channel_name, config):
+def get_feed(channel_name, config, since=None):
     playlist_id = get_uploads_playlist_id(config["id"])
     min_duration = config.get("min_duration")
 
@@ -122,9 +130,9 @@ def get_feed(channel_name, config):
             video_id = snippet["resourceId"]["videoId"]
 
             # A playlist de uploads vem sempre do vídeo mais recente para o
-            # mais antigo. Assim que encontramos um vídeo fora dos últimos 7
-            # dias, todos os próximos também estarão fora, então paramos.
-            if not is_last_7_days(published):
+            # mais antigo. Quando encontramos um vídeo anterior ao início da
+            # edição, todos os próximos também estarão fora da janela.
+            if since is not None and parse_date(published) <= since:
                 stop_paging = True
                 break
 
@@ -133,9 +141,6 @@ def get_feed(channel_name, config):
                 continue
 
             if contains_any(title, config.get("ignore", [])):
-                continue
-
-            if already_sent(video_id):
                 continue
 
             candidates.append({

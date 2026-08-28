@@ -1,13 +1,15 @@
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 
 
-def generate_subject():
-    return f"A Week in Music · {datetime.now().strftime('%B %d, %Y')}"
+def generate_subject(edition_date: date | None = None):
+    edition_date = edition_date or datetime.now().date()
+    return f"A Week in Music · {edition_date.strftime('%B %d, %Y')}"
     
 
-def generate_html(videos):
-    today = datetime.now().strftime("%B %d, %Y")
+def generate_html(videos, edition_date: date | None = None):
+    edition_date = edition_date or datetime.now().date()
+    today = edition_date.strftime("%B %d, %Y")
 
     # Paleta / estilo
     bg_page = "#ffffff"

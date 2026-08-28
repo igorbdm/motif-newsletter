@@ -2,11 +2,34 @@ name: Enviar Music Weekly
 
 on:
   schedule:
-    - cron: "32 13 * * 5"
+    - cron: "48 9 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "3 10 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "18 10 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "33 10 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "48 10 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "3 11 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "18 11 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "33 11 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "48 11 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "3 12 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "18 12 * * 5"
+      timezone: "America/Sao_Paulo"
+    - cron: "33 12 * * 5"
+      timezone: "America/Sao_Paulo"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: music-weekly-send
@@ -15,11 +38,11 @@ concurrency:
 jobs:
   send:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       EMAIL_DELIVERY_PROVIDER: kit
       KIT_API_KEY: ${{ secrets.KIT_API_KEY }}
-      KIT_TAG_NAME: music-weekly
       KIT_SENDER_EMAIL: newsletter@motifnewsletter.com
       KIT_PUBLISH_TO_WEB: "false"
       KIT_SEND_DELAY_MINUTES: "1"
@@ -37,15 +60,3 @@ jobs:
 
       - name: Gerar e enviar newsletter
         run: python src/main.py
-
-      - name: Salvar histórico de vídeos enviados
-        run: |
-          if git diff --quiet -- data/sent_videos.json; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/sent_videos.json
-          git commit -m "chore: atualizar histórico da newsletter"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push

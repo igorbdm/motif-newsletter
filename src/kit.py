@@ -19,22 +19,44 @@ class KitNewsletterSender:
         self.send_delay_minutes = send_delay_minutes
 
     @classmethod
-    def from_environment(cls):
-        required = ["KIT_API_KEY", "KIT_TAG_NAME"]
+    def from_environment(cls, tag_name=None):
+        required = ["KIT_API_KEY"]
         missing = [name for name in required if not os.getenv(name)]
 
         if missing:
             raise RuntimeError(f"Configurações do Kit ausentes: {', '.join(missing)}")
 
+        tag_name = tag_name or os.getenv("KIT_TAG_NAME")
+        if not tag_name:
+            raise RuntimeError("Configuração do Kit ausente: KIT_TAG_NAME")
+
         return cls(
             api_key=os.environ["KIT_API_KEY"],
-            tag_name=os.environ["KIT_TAG_NAME"],
+            tag_name=tag_name,
             sender_email=os.getenv("KIT_SENDER_EMAIL"),
             publish_to_web=os.getenv("KIT_PUBLISH_TO_WEB", "false").casefold() == "true",
             send_delay_minutes=int(os.getenv("KIT_SEND_DELAY_MINUTES", "1")),
         )
 
-    def send(self, subject: str, html: str) -> None:
+    def send(self, subject: str, html: str, edition_id: str | None = None) -> str:
+        if edition_id:
+            existing = self._find_edition_broadcasts(edition_id)
+            active = [broadcast for broadcast in existing if broadcast.get("status") != "aborted"]
+
+            if len(active) > 1:
+                raise RuntimeError(
+                    f"Mais de um Broadcast ativo encontrado para a edição {edition_id}. "
+                    "Nenhum novo envio será criado para evitar duplicidade."
+                )
+
+            if active:
+                status = active[0].get("status")
+                print(
+                    f"A edição {edition_id} já possui um Broadcast no Kit "
+                    f"(id={active[0].get('id')}, status={status}). Nenhum novo envio será criado."
+                )
+                return status or "existing"
+
         tag_id = self._find_tag_id()
         now = datetime.now(timezone.utc)
         send_at = (now + timedelta(minutes=self.send_delay_minutes)).replace(second=0, microsecond=0)
@@ -45,7 +67,7 @@ class KitNewsletterSender:
         payload = {
             "email_address": self.sender_email,
             "content": html,
-            "description": f"Music Weekly — {subject}",
+            "description": f"Music Weekly — edition={edition_id} — {subject}" if edition_id else f"Music Weekly — {subject}",
             "public": self.publish_to_web,
             "published_at": send_at.isoformat() if self.publish_to_web else None,
             "send_at": send_at.isoformat(),
@@ -58,7 +80,35 @@ class KitNewsletterSender:
             ],
         }
 
-        self._request("POST", "/broadcasts", payload)
+        response = self._request("POST", "/broadcasts", payload)
+        broadcast = response.get("broadcast", {})
+        print(
+            f"Broadcast criado no Kit (id={broadcast.get('id')}, "
+            f"status={broadcast.get('status', 'unknown')}, edition={edition_id})."
+        )
+        return "created"
+
+    def _find_edition_broadcasts(self, edition_id):
+        path = "/broadcasts?per_page=1000&slim=true"
+        marker = f"edition={edition_id}"
+        matches = []
+
+        while path:
+            response = self._request("GET", path)
+
+            for broadcast in response.get("broadcasts", []):
+                if marker in (broadcast.get("description") or ""):
+                    matches.append(broadcast)
+
+            pagination = response.get("pagination", {})
+            cursor = pagination.get("end_cursor")
+            path = (
+                f"/broadcasts?per_page=1000&slim=true&after={cursor}"
+                if pagination.get("has_next_page") and cursor
+                else None
+            )
+
+        return matches
 
     def _find_tag_id(self):
         path = "/tags?per_page=1000"

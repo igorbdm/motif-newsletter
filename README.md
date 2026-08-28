@@ -4,15 +4,15 @@ Uma newsletter semanal, simples, com apresentações musicais completas publicad
 
 O projeto usa a YouTube Data API v3 para ler os uploads de cada canal, seleciona os vídeos desejados e envia um e-mail em HTML.
 
-> Antes usava os feeds RSS públicos do YouTube, mas esse feed só retorna os 15 uploads mais recentes de cada canal, então vídeos podiam ficar de fora quando um canal postava bastante coisa na semana. A API resolve isso porque permite paginar e buscar todos os uploads dos últimos 7 dias, não só os 15 mais recentes.
+> Antes usava os feeds RSS públicos do YouTube, mas esse feed só retorna os 15 uploads mais recentes de cada canal, então vídeos podiam ficar de fora quando um canal postava bastante coisa na semana. A API resolve isso porque permite paginar e buscar todos os uploads desde a última edição semanal, não só os 15 mais recentes.
 
 ## Como funciona
 
 1. Lê os canais definidos em `src/channels.py`.
 2. Para cada canal, busca os uploads recentes via YouTube Data API.
 3. Mantém títulos que contenham alguma palavra em `keep` e descarta os que contenham uma palavra em `ignore`.
-4. Considera apenas vídeos publicados nos últimos sete dias que ainda não foram enviados.
-5. Gera o e-mail, obtém os destinatários, envia-o e só então registra os vídeos no histórico (removendo automaticamente do histórico qualquer vídeo com mais de 7 dias, já que ele nunca mais seria consultado de qualquer forma).
+4. Considera apenas vídeos publicados desde a sexta-feira anterior à edição atual.
+5. Gera o e-mail, verifica no Kit se a edição daquela execução já possui um Broadcast e só cria um novo Broadcast quando não existe outro ativo. Na produção, a edição é identificada pela data da sexta-feira; nos testes, cada execução manual recebe um identificador único do GitHub.
 
 ## Configuração da API do YouTube
 
@@ -35,12 +35,13 @@ Para enviar pelo Kit, configure estas variáveis:
 ```bash
 EMAIL_DELIVERY_PROVIDER=kit
 KIT_API_KEY=sua-chave-v4
-KIT_TAG_NAME=music-weekly
 KIT_SENDER_EMAIL=oi@igorbdm.com
 KIT_PUBLISH_TO_WEB=false
 ```
 
-O Kit gerencia os assinantes da tag; por isso `EMAIL_TO` não é usado nesse modo. A tag precisa existir antes da execução. O padrão mantém a versão web desativada.
+O Kit gerencia os assinantes da tag; por isso `EMAIL_TO` não é usado nesse modo. As tags `music-weekly` e `test` precisam existir antes das execuções correspondentes. O padrão mantém a versão web desativada.
+
+A audiência do Kit é definida automaticamente pela branch em execução: `main` envia para `music-weekly` e `test` envia para `test`. A branch `test` possui um workflow separado de disparo manual; ela não participa do agendamento automático.
 
 ## Executar manualmente
 
@@ -56,7 +57,7 @@ Depois de definir as configurações de e-mail e da API do YouTube, execute:
 python3 src/main.py
 ```
 
-O arquivo `newsletter.html` também é criado localmente como uma cópia para conferência. Se o envio falhar, nenhum vídeo é adicionado ao histórico.
+O arquivo `newsletter.html` também é criado localmente como uma cópia para conferência antes do envio.
 
 ## Arquitetura de envio
 
@@ -67,11 +68,11 @@ O núcleo não depende de SMTP nem de uma origem específica de assinantes:
 - `src/kit.py` integra broadcasts do Kit a uma tag da audiência;
 - `src/bootstrap.py` escolhe o provedor a partir de `EMAIL_DELIVERY_PROVIDER`.
 
-Por enquanto, `EMAIL_TO` aceita um endereço (como antes) ou uma lista separada por vírgulas. No Kit, a audiência fica na tag configurada. Ao escolher outro provedor, implemente um novo remetente e altere apenas `bootstrap.py`.
+Por enquanto, `EMAIL_TO` aceita um endereço (como antes) ou uma lista separada por vírgulas. No Kit, a audiência é escolhida automaticamente pela branch. Ao escolher outro provedor, implemente um novo remetente e altere apenas `bootstrap.py`.
 
 ## GitHub Actions
 
-O workflow inicia a preparação às 07:59 de segunda-feira no horário de Brasília e agenda o envio no Kit para 08:00. Ele também pode ser iniciado manualmente pela aba **Actions**. Antes de ativá-lo, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`. Após o Kit aceitar a campanha, o workflow cria um commit com o histórico atualizado.
+O workflow tenta executar 12 vezes às 09:48, 10:03, 10:18, 10:33, 10:48, 11:03, 11:18, 11:33, 11:48, 12:03, 12:18 e 12:33, sempre às sextas-feiras no fuso `America/Sao_Paulo`. Cada tentativa consulta primeiro o Kit pela identidade da edição e não cria outro Broadcast quando aquela identidade já possui um envio ativo ou concluído. Na produção, a identidade é a sexta-feira; no teste, cada execução manual recebe um ID único do GitHub. O workflow de produção também pode ser iniciado manualmente pela aba **Actions**. O workflow de teste é somente manual e deve ser executado selecionando a branch `test`. Antes de ativá-los, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`.
 
 ## Adicionar ou ajustar canais
 
