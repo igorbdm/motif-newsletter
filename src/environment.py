@@ -8,6 +8,30 @@ BRANCH_AUDIENCES = {
 }
 
 
+def get_edition_id(edition_date, branch: str | None = None) -> str:
+    """Return a branch-scoped, deterministic production or test edition ID."""
+    branch = branch or get_runtime_branch()
+    date_id = edition_date.isoformat()
+
+    if branch == "main":
+        return date_id
+
+    if branch == "test":
+        run_id = os.getenv("GITHUB_RUN_ID")
+        run_attempt = os.getenv("GITHUB_RUN_ATTEMPT", "1")
+        if not run_id:
+            raise RuntimeError(
+                "Execuções de teste precisam de GITHUB_RUN_ID para identificar "
+                "unicamente cada envio. Execute o workflow Testar Music Weekly pelo GitHub Actions."
+            )
+        return f"test-{date_id}-run-{run_id}-attempt-{run_attempt}"
+
+    raise RuntimeError(
+        f"Branch não autorizada para envio: {branch}. "
+        "Somente main e test podem enviar newsletters."
+    )
+
+
 def get_runtime_branch() -> str:
     """Return the branch running the application, failing closed if unknown."""
     github_branch = os.getenv("GITHUB_REF_NAME")

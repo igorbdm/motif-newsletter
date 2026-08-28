@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from environment import get_audience_tag, get_runtime_branch
+from environment import get_audience_tag, get_edition_id, get_runtime_branch
 
 import collector
 from kit import KitNewsletterSender
@@ -101,6 +101,30 @@ class EnvironmentTests(unittest.TestCase):
         with patch.dict("os.environ", {"GITHUB_REF_NAME": "test"}, clear=True):
             self.assertEqual(get_runtime_branch(), "test")
 
+    def test_production_edition_id_uses_edition_date(self):
+        with patch.dict("os.environ", {"GITHUB_REF_NAME": "main"}, clear=True):
+            self.assertEqual(get_edition_id(date(2026, 8, 28)), "2026-08-28")
+
+    def test_test_edition_id_uses_unique_github_run_identity(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "GITHUB_REF_NAME": "test",
+                "GITHUB_RUN_ID": "123456",
+                "GITHUB_RUN_ATTEMPT": "2",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                get_edition_id(date(2026, 8, 28)),
+                "test-2026-08-28-run-123456-attempt-2",
+            )
+
+    def test_test_edition_id_requires_github_run_id(self):
+        with patch.dict("os.environ", {"GITHUB_REF_NAME": "test"}, clear=True):
+            with self.assertRaises(RuntimeError):
+                get_edition_id(date(2026, 8, 28))
+
 
 class DateTests(unittest.TestCase):
     def test_collection_start_is_previous_friday_at_midnight(self):
@@ -166,6 +190,7 @@ class DateTests(unittest.TestCase):
         sender.send.return_value = "created"
 
         with patch.object(main, "get_edition_date", return_value=date(2026, 8, 28)), \
+            patch.dict("os.environ", {"GITHUB_REF_NAME": "main"}, clear=True), \
             patch.object(main, "get_newsletter_sender", return_value=sender), \
             patch.object(main, "get_feed", side_effect=lambda name, config, since=None: calls.append(since) or [{
                 "channel": name,
@@ -342,6 +367,45 @@ class KitSenderTests(unittest.TestCase):
         self.assertEqual(payload["email_address"], "oi@igorbdm.com")
         self.assertEqual(payload["subscriber_filter"][0]["all"][0], {"type": "tag", "ids": [42]})
         self.assertIn("edition=2026-08-28", payload["description"])
+
+    def test_does_not_confuse_test_and_production_edition_ids(self):
+        responses = [
+            self.Response({"broadcasts": [], "pagination": {"has_next_page": False}}),
+            self.Response({"tags": [{"id": 42, "name": "test"}], "pagination": {}}),
+            self.Response({"broadcast": {"id": 8, "status": "scheduled"}}),
+        ]
+
+        with patch("kit.urlopen", side_effect=responses) as urlopen:
+            result = KitNewsletterSender("key", "test").send(
+                "Music Weekly", "<p>Conteúdo</p>", edition_id="test-2026-08-28-run-123-attempt-1"
+            )
+
+        request = urlopen.call_args_list[2].args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(result, "created")
+        self.assertIn("edition=test-2026-08-28-run-123-attempt-1", payload["description"])
+
+    def test_test_runs_with_different_ids_can_each_create_broadcasts(self):
+        responses = [
+            self.Response({"broadcasts": [], "pagination": {"has_next_page": False}}),
+            self.Response({"tags": [{"id": 42, "name": "test"}], "pagination": {}}),
+            self.Response({"broadcast": {"id": 9, "status": "scheduled"}}),
+            self.Response({"broadcasts": [], "pagination": {"has_next_page": False}}),
+            self.Response({"tags": [{"id": 42, "name": "test"}], "pagination": {}}),
+            self.Response({"broadcast": {"id": 10, "status": "scheduled"}}),
+        ]
+
+        with patch("kit.urlopen", side_effect=responses):
+            sender = KitNewsletterSender("key", "test")
+            first = sender.send(
+                "Music Weekly", "<p>Conteúdo</p>", edition_id="test-2026-08-28-run-123-attempt-1"
+            )
+            second = sender.send(
+                "Music Weekly", "<p>Conteúdo</p>", edition_id="test-2026-08-28-run-124-attempt-1"
+            )
+
+        self.assertEqual(first, "created")
+        self.assertEqual(second, "created")
 
     def test_does_not_create_duplicate_for_existing_completed_broadcast(self):
         response = self.Response({

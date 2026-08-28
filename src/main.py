@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from bootstrap import get_newsletter_sender
 from channels import CHANNELS
 from collector import get_feed
+from environment import get_edition_id
 from newsletter import generate_html, generate_subject
 
 
@@ -24,7 +25,7 @@ def get_collection_start(edition_date):
 
 def main(newsletter_sender=None):
     edition_date = get_edition_date()
-    edition_id = edition_date.isoformat()
+    edition_id = get_edition_id(edition_date)
     collection_start = get_collection_start(edition_date)
     newsletter_sender = newsletter_sender or get_newsletter_sender()
 

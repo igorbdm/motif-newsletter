@@ -11,8 +11,8 @@ O projeto usa a YouTube Data API v3 para ler os uploads de cada canal, seleciona
 1. Lê os canais definidos em `src/channels.py`.
 2. Para cada canal, busca os uploads recentes via YouTube Data API.
 3. Mantém títulos que contenham alguma palavra em `keep` e descarta os que contenham uma palavra em `ignore`.
-4. Considera apenas vídeos publicados nos últimos sete dias que ainda não foram enviados.
-5. Gera o e-mail, verifica no Kit se a edição daquela sexta-feira já possui um Broadcast e só cria um novo Broadcast quando não existe outro ativo. A seleção de vídeos é baseada na janela semanal desde a edição anterior.
+4. Considera apenas vídeos publicados desde a sexta-feira anterior à edição atual.
+5. Gera o e-mail, verifica no Kit se a edição daquela execução já possui um Broadcast e só cria um novo Broadcast quando não existe outro ativo. Na produção, a edição é identificada pela data da sexta-feira; nos testes, cada execução manual recebe um identificador único do GitHub.
 
 ## Configuração da API do YouTube
 
@@ -72,7 +72,7 @@ Por enquanto, `EMAIL_TO` aceita um endereço (como antes) ou uma lista separada 
 
 ## GitHub Actions
 
-O workflow tenta executar 12 vezes às 09:48, 10:03, 10:18, 10:33, 10:48, 11:03, 11:18, 11:33, 11:48, 12:03, 12:18 e 12:33, sempre às sextas-feiras no fuso `America/Sao_Paulo`. Cada tentativa consulta primeiro o Kit pela edição da sexta-feira e não cria outro Broadcast se já houver um envio ativo ou concluído para aquela edição. Ele também pode ser iniciado manualmente pela aba **Actions**. Antes de ativá-lo, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`.
+O workflow tenta executar 12 vezes às 09:48, 10:03, 10:18, 10:33, 10:48, 11:03, 11:18, 11:33, 11:48, 12:03, 12:18 e 12:33, sempre às sextas-feiras no fuso `America/Sao_Paulo`. Cada tentativa consulta primeiro o Kit pela identidade da edição e não cria outro Broadcast quando aquela identidade já possui um envio ativo ou concluído. Na produção, a identidade é a sexta-feira; no teste, cada execução manual recebe um ID único do GitHub. O workflow de produção também pode ser iniciado manualmente pela aba **Actions**. O workflow de teste é somente manual e deve ser executado selecionando a branch `test`. Antes de ativá-los, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`.
 
 ## Adicionar ou ajustar canais
 
