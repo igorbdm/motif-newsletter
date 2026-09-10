@@ -135,16 +135,9 @@ def generate_html(videos, edition_date: date | None = None):
 
         <tr>
           <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
-            Hey everyone, Igor from Motif here.
-
-I’ve added a few new channels to the newsletter this week: KCRW, Paste Magazine, and World Cafe. They’re now joining the other channels we already have around here.
-
-Just a quick heads-up: if you don’t see a specific channel in an edition, it’s simply because they didn’t release any performances over the past 7 days. So, nothing to worry about :)
-
-And if you ever want to recommend a channel, or have any ideas or suggestions for Motif, just reply to this email. I’d love to hear from you and chat!
-
-See you in the next one!
-
+            Hey everyone, Igor from Motif here.<br><br>
+            I’ve added a new channel to the newsletter this week: KCRW, which is now joining the other channels we already have around here. Just a quick heads-up: if you don’t see a specific channel in an edition, it’s simply because they didn’t release any performances over the past 7 days. So, nothing to worry about :) We’ve also been working on a few things behind the scenes at Motif. More on that soon. And if you ever feel like saying hi, sharing what you’ve been listening to, or just talking music, hit reply to this email. I’d genuinely love to hear from you.<br><br>
+            See you in the next one!
           </td>
         </tr>
       </table>
