@@ -135,7 +135,16 @@ def generate_html(videos, edition_date: date | None = None):
 
         <tr>
           <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
-            A weekly gathering of performances published across the channels we follow.
+            Hey everyone, Igor from Motif here.
+
+I’ve added a few new channels to the newsletter this week: KCRW, Paste Magazine, and World Cafe. They’re now joining the other channels we already have around here.
+
+Just a quick heads-up: if you don’t see a specific channel in an edition, it’s simply because they didn’t release any performances over the past 7 days. So, nothing to worry about :)
+
+And if you ever want to recommend a channel, or have any ideas or suggestions for Motif, just reply to this email. I’d love to hear from you and chat!
+
+See you in the next one!
+
           </td>
         </tr>
       </table>
