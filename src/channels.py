@@ -20,6 +20,14 @@ CHANNELS = {
         "ignore": [],
         "min_duration": 90,
     },
+    
+        "KCRW": {
+        "id": "UC54U5gpKkaa_BpXRVNip2Dw",
+        "keep": ["Live on KCRW"],
+        "ignore": [],
+        "min_duration": 600,
+    },
+
         "Cultura Livre": {
         "id": "UCBuFf6FSDclfDvRGJY1Q5Uw",
         "keep": ["CULTURA LIVRE"],
