@@ -2,29 +2,350 @@ from datetime import date, datetime
 from html import escape
 
 
+# Estrutura da edição:
+#   1. Cabeçalho (logo, data e abertura)
+#   2. Song of the Week (cartão de destaque)
+#   3. Live Sessions (performances, agrupadas por canal)
+#   4. Compartilhar
+#   5. Beyond the Stage (vídeos que não são música ao vivo)
+#   6. Rodapé
+#
+# Compatibilidade com clientes de e-mail: o layout usa apenas tabelas, todo
+# espaçamento fica em <td> (o Outlook ignora padding em <div> e <table>) e
+# cores de fundo também vão no atributo bgcolor.
+
+# Paleta / estilo
+ACCENT = "#f23809"
+TEXT_MAIN = "#000000"
+TEXT_MUTED = "#6b6b6b"
+CHANNEL_COLOR = TEXT_MUTED
+HAIRLINE = "#dcdcd7"
+BG_PAGE = "#ffffff"
+BG_FEATURE = "#f2f2ef"
+BG_SOFT = "#faf6eb"  # creme bem leve, como papel pólen
+FONT = "'Montserrat', Arial, sans-serif"
+
+LINK_LABELS = {
+    "live": "Watch performance →",
+    "extras": "Watch video →",
+}
+
+
 def generate_subject(edition_date: date | None = None):
     edition_date = edition_date or datetime.now().date()
     return f"A Week in Music · {edition_date.strftime('%B %d, %Y')}"
-    
 
-def generate_html(videos, edition_date: date | None = None):
-    edition_date = edition_date or datetime.now().date()
+
+def row(content, padding_bottom=40):
+    """Uma linha do corpo do e-mail, com as margens laterais padrão."""
+    return f"""
+  <tr>
+    <td class="espacamento-lateral" style="padding:0 32px {padding_bottom}px;">
+{content}
+    </td>
+  </tr>
+"""
+
+
+def label_html(label, description):
+    """Rótulo laranja + frase de apoio: abre todas as seções."""
+    return f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+        <tr>
+          <td style="font-family:{FONT}; font-size:13px; line-height:1.4; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:{ACCENT};">
+            {label}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:4px; font-family:{FONT}; font-size:14px; line-height:1.5; color:{TEXT_MAIN};">
+            {description}
+          </td>
+        </tr>
+      </table>"""
+
+
+def section_header_html(label, description):
+    return f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+        <tr>
+          <td style="border-top:2px solid {TEXT_MAIN}; padding-top:20px;">
+            {label_html(label, description)}
+          </td>
+        </tr>
+      </table>"""
+
+
+def header_html(edition_date):
     today = edition_date.strftime("%B %d, %Y")
 
-    # Paleta / estilo
-    bg_page = "#ffffff"
-    bg_card = "#ffffff"
-    accent = "#f23809"
-    channel_color = "#000000"
-    text_main = "#000000"
-    text_muted = "#6b6b6b"
+    return f"""
+  <!-- HEADER -->
+  <tr>
+    <td class="header" style="padding:52px 32px 36px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+        <tr>
+          <td class="header-logo" style="font-family:{FONT}; font-size:48px; line-height:1; font-weight:bold; letter-spacing:-3px; color:{TEXT_MAIN};">
+            motif.
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:8px; font-family:{FONT}; font-size:14px; line-height:1.4; color:{TEXT_MAIN};">
+            Good Music for Good People.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+""" + row(label_html(
+        today,
+        "A weekly selection of live sessions and music worth your time.",
+    ), padding_bottom=32)
 
-    html = f"""
-<!DOCTYPE html>
+
+def generate_pick_html(pick):
+    """Música recomendada da semana, escolhida a partir do Last.fm.
+
+    Espera um dicionário com "artist" e "title" e, opcionalmente, "album" e
+    "image" (capa). A seção não tem link: é só uma recomendação.
+    """
+    artist = escape(str(pick["artist"]))
+    title = escape(str(pick["title"]))
+
+    album = ""
+    if pick.get("album"):
+        album = f"""
+                          <tr>
+                            <td style="padding-top:10px; font-family:{FONT}; font-size:13px; line-height:1.4; color:{TEXT_MUTED};">
+                              {escape(str(pick["album"]))}
+                            </td>
+                          </tr>"""
+
+    cover = ""
+    if pick.get("image"):
+        image = escape(str(pick["image"]), quote=True)
+        cover = f"""
+                <td class="pick-cover" width="112" valign="top" style="width:112px; padding:0 20px 0 0;">
+                  <img src="{image}" width="112" height="112" alt="{title}, {artist}" style="display:block; width:112px; height:112px; border:0; outline:none; text-decoration:none;">
+                </td>"""
+
+    return "\n  <!-- SONG OF THE WEEK -->" + row(
+        section_header_html("Song of the Week", "One song I think deserves a place in your week.")
+        + f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+        <tr>
+          <td style="padding-top:22px;">
+            <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0" bgcolor="{BG_FEATURE}" style="background-color:{BG_FEATURE};">
+              <tr>
+                <td bgcolor="{BG_FEATURE}" style="padding:20px; background-color:{BG_FEATURE};">
+                  <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+                    <tr>{cover}
+                      <td class="pick-info" valign="middle">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td style="font-family:{FONT}; font-size:20px; line-height:1.25; font-weight:bold; color:{TEXT_MAIN};">
+                              {title}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:4px; font-family:{FONT}; font-size:16px; line-height:1.35; color:{TEXT_MAIN};">
+                              {artist}
+                            </td>
+                          </tr>{album}
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>""")
+
+
+# Siglas que devem aparecer em maiúsculas no selo de gênero.
+GENRE_ACRONYMS = {"mpb": "MPB", "r&b": "R&B", "rnb": "R&B", "idm": "IDM", "edm": "EDM"}
+
+
+def format_genre(genre):
+    """"indie rock" -> "Indie rock", "mpb" -> "MPB"."""
+    genre = genre.strip()
+    return GENRE_ACRONYMS.get(genre.casefold(), genre[:1].upper() + genre[1:])
+
+
+def genre_html(video):
+    """Selo com o gênero do artista, antes do link. Vazio se não houver.
+
+    Os &nbsp; nas pontas garantem um respiro no Outlook, que ignora padding
+    em <span>.
+    """
+    # O Beyond the Stage não é música ao vivo e não leva selo de gênero.
+    if not video.get("genre") or video.get("section") == "extras":
+        return ""
+
+    genre = escape(format_genre(str(video["genre"])))
+
+    return f"""<span style="display:inline-block; padding:1px 4px; background-color:{BG_FEATURE}; font-family:{FONT}; font-size:11px; line-height:1.5; font-weight:normal; color:{TEXT_MUTED}; white-space:nowrap;">&nbsp;{genre}&nbsp;</span>&nbsp;&nbsp;
+            """
+
+
+def video_html(video, is_first):
+    title = escape(str(video["title"]))
+    link = escape(str(video["link"]), quote=True)
+    link_label = LINK_LABELS[video.get("section", "live")]
+    padding_top = 0 if is_first else 18
+
+    return f"""
+        <tr>
+          <td style="padding-top:{padding_top}px; font-family:{FONT}; font-size:15px; line-height:1.4; font-weight:bold; color:{TEXT_MAIN};">
+            {title}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-top:4px; font-family:{FONT}; font-size:13px; line-height:1.4; font-weight:bold;">
+            {genre_html(video)}<a href="{link}" target="_blank" style="color:{ACCENT}; text-decoration:underline;">{link_label}</a>
+          </td>
+        </tr>"""
+
+
+def channel_html(channel, videos, is_first):
+    # O primeiro canal fica logo abaixo do cabeçalho da seção; os seguintes
+    # são separados por um fio fino. O espaçador usa height + font-size:0,
+    # que é a forma que o Outlook respeita.
+    divider = ""
+    if not is_first:
+        divider = f"""
+        <tr>
+          <td height="26" style="height:26px; font-size:0; line-height:0; border-bottom:1px solid {HAIRLINE};">&nbsp;</td>
+        </tr>"""
+
+    items = "".join(
+        video_html(video, is_first=index == 0)
+        for index, video in enumerate(videos)
+    )
+
+    return f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">{divider}
+        <tr>
+          <td style="padding-top:24px; padding-bottom:12px; font-family:{FONT}; font-size:12px; line-height:1.3; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:{CHANNEL_COLOR};">
+            {escape(str(channel))}
+          </td>
+        </tr>{items}
+      </table>"""
+
+
+def group_by_channel(videos):
+    groups = {}
+    for video in videos:
+        groups.setdefault(video["channel"], []).append(video)
+    return groups
+
+
+def video_section_html(comment, label, description, videos):
+    channels = "".join(
+        channel_html(channel, channel_videos, is_first=index == 0)
+        for index, (channel, channel_videos) in enumerate(group_by_channel(videos).items())
+    )
+
+    return f"\n  <!-- {comment} -->" + row(
+        section_header_html(label, description) + channels
+    )
+
+
+def share_html():
+    return "\n  <!-- SHARE / SIGNUP -->" + row(f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0" bgcolor="{BG_SOFT}" style="background-color:{BG_SOFT};">
+        <tr>
+          <td bgcolor="{BG_SOFT}" style="padding:22px 24px 24px; background-color:{BG_SOFT};">
+            <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+              <tr>
+                <td style="font-family:{FONT}; font-size:14px; line-height:1.4; font-weight:bold; color:{TEXT_MAIN};">
+                  Know someone who might enjoy this? Forward this email to them.
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top:6px; font-family:{FONT}; font-size:13px; line-height:1.5; color:{TEXT_MAIN};">
+                  And if someone sent it to you, you can subscribe below.
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top:12px; font-family:{FONT}; font-size:13px; line-height:1.4; font-weight:bold;">
+                  <a href="https://motifnewsletter.com" target="_blank" style="color:{ACCENT}; text-decoration:underline;">Subscribe to Motif →</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>""")
+
+
+def sign_off_html():
+    return "\n  <!-- SIGN-OFF -->" + row(f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+        <tr>
+          <td style="font-family:{FONT}; font-size:14px; line-height:1.5; color:{TEXT_MAIN};">
+            That's all for this week. See you next Friday.
+          </td>
+        </tr>
+      </table>""", padding_bottom=32)
+
+
+def footer_html():
+    return "\n  <!-- FOOTER -->" + row(f"""
+      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" border="0">
+        <tr>
+          <td style="border-top:2px solid {TEXT_MAIN}; padding-top:20px; font-family:{FONT}; font-size:12px; line-height:1.5; color:{TEXT_MUTED};">
+            You're receiving this because you subscribed to the Motif Newsletter.<br>
+            Good Music for Good People.
+          </td>
+        </tr>
+      </table>""", padding_bottom=32)
+
+
+def generate_html(videos, edition_date: date | None = None, pick=None):
+    edition_date = edition_date or datetime.now().date()
+
+    # Vídeos que não são música ao vivo (ex.: "What's In My Bag?") ficam
+    # em uma seção própria, depois das performances.
+    live_videos = [video for video in videos if video.get("section", "live") != "extras"]
+    extra_videos = [video for video in videos if video.get("section") == "extras"]
+
+    body = header_html(edition_date)
+
+    if pick:
+        body += generate_pick_html(pick)
+
+    if live_videos:
+        body += video_section_html(
+            "LIVE SESSIONS",
+            "Live Sessions",
+            "Full performances published this week by the channels we follow.",
+            live_videos,
+        )
+
+    # O compartilhamento fecha as performances; os extras vêm depois.
+    body += share_html()
+
+    if extra_videos:
+        body += video_section_html(
+            "BEYOND THE STAGE",
+            "Beyond the Stage",
+            "Not live music, but still music.",
+            extra_videos,
+        )
+
+    body += sign_off_html()
+    body += footer_html()
+
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>Motif Newsletter</title>
 
 <style type="text/css">
@@ -45,201 +366,68 @@ def generate_html(videos, edition_date: date | None = None):
     body {{
         margin: 0;
         padding: 0;
-        background-color: #ffffff;
-        font-family: 'Montserrat', Arial, sans-serif;
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
     }}
 
-    .body_table {{
-        border-left: 5px solid #f23809;
-        background: #ffffff;
+    table, td {{
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
     }}
 
-    .espacamento-lateral {{
-        padding-left: 32px;
-        padding-right: 32px;
-    }}
-
-    .header {{
-        padding: 52px 0 45px 32px;
-    }}
-
-    .header-logo {{
-        font-family: 'Montserrat', Arial, sans-serif;
-        font-size: 48px;
-        line-height: 1;
-        font-weight: 700;
-        letter-spacing: -3px;
-        color: #000000;
-    }}
-
-    .section-header {{
-        border-top: 2px solid #000000;
-        padding-top: 20px;
+    /* Impede o iOS de transformar datas em links azuis. */
+    a[x-apple-data-detectors] {{
+        color: inherit !important;
+        text-decoration: none !important;
     }}
 
     @media (min-width: 768px) {{
         .body_table {{
-            border-left: 8px solid #f23809;
+            border-left: 8px solid {ACCENT} !important;
         }}
 
         .espacamento-lateral {{
-            padding-left: 78px;
-            padding-right: 78px;
+            padding-left: 78px !important;
+            padding-right: 78px !important;
         }}
 
         .header {{
-            padding: 82px 0 71px 78px;
+            padding: 82px 78px 48px !important;
+        }}
+    }}
+
+    /* No celular, a capa da música fica acima do texto. */
+    @media (max-width: 480px) {{
+        .pick-cover,
+        .pick-info {{
+            display: block !important;
+            width: 100% !important;
+            padding-right: 0 !important;
+        }}
+
+        .pick-cover {{
+            padding-bottom: 18px !important;
         }}
     }}
 </style>
-
 </head>
 
-<body style="margin:0; background-color:{bg_page};">
+<body style="margin:0; padding:0; background-color:{BG_PAGE};">
 
-<table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="center" border="0" style="max-width:650px; background:#fff;">
+<!--[if mso]><table role="presentation" width="650" align="center" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
+<table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="center" border="0" bgcolor="{BG_PAGE}" style="max-width:650px; background-color:{BG_PAGE};">
 <tr>
 <td>
 
-<table role="presentation" class="body_table" cellspacing="0" cellpadding="0" width="100%" align="center" border="0" style="background:#fff; border-left:5px solid {accent};">
-
-  <!-- HEADER -->
-  <tr>
-    <td>
-      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" class="header" style="padding:52px 0 45px 32px;">
-        <tr>
-          <td>
-            <div class="header-logo" style="font-family:'Montserrat', Arial, sans-serif; font-size:48px; line-height:1; font-weight:700; letter-spacing:-3px; color:#000000;">
-              motif.
-            </div>
-            <div style="padding-top:8px; color:#000000; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4; letter-spacing:normal; word-spacing:normal; white-space:normal;">
-              Good Music for Good People.
-            </div>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-
-  <!-- INTRO -->
-  <tr>
-    <td class="espacamento-lateral" style="padding-bottom:25px; padding-left:32px; padding-right:32px;">
-      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0">
-        <tr>
-          <td>
-            <span style="font-weight:bold; text-transform:uppercase; color:{accent}; font-family:'Montserrat', Arial, sans-serif; font-size:14px;">
-              {today}
-            </span>
-          </td>
-        </tr>
-
-        <tr>
-          <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
-A weekly gathering of performances published across the channels we follow.
-
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-"""
-
-    current_channel = None
-
-    for video in videos:
-        channel = escape(str(video["channel"]))
-        title = escape(str(video["title"]))
-        link = escape(str(video["link"]), quote=True)
-
-        if video["channel"] != current_channel:
-            current_channel = video["channel"]
-
-            html += f"""
-  <!-- CHANNEL HEADER -->
-  <tr>
-    <td class="espacamento-lateral" style="padding-bottom:25px; padding-left:32px; padding-right:32px;">
-      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" class="section-header" style="border-top:2px solid #000000; padding-top:20px;">
-        <tr>
-          <td>
-            <span style="font-weight:bold; color:{channel_color}; font-family:'Montserrat', Arial, sans-serif; font-size:20px;">
-              {channel}
-            </span>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-"""
-
-        html += f"""
-  <!-- VIDEO -->
-  <tr>
-    <td class="espacamento-lateral" style="padding-bottom:25px; padding-left:32px; padding-right:32px;">
-      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0">
-        <tr>
-          <td>
-            <div style="font-weight:bold; color:{accent}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
-              {title}
-            </div>
-          </td>
-        </tr>
-
-        <tr>
-          <td style="padding-top:5px; color:{text_main}; font-family:'Montserrat', Arial, sans-serif; font-size:14px; line-height:1.4;">
-            <a href="{link}" target="_blank" style="color:#000000; text-decoration:underline;">
-              Watch performance →
-            </a>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-"""
-
-    html += f"""
-  <!-- SHARE / SIGNUP -->
-  <tr>
-    <td class="espacamento-lateral" style="padding:0 32px 25px; padding-left:32px; padding-right:32px;">
-      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" style="border-collapse:separate; background:#f7f7f5;">
-        <tr>
-          <td style="padding:24px 24px 25px; font-family:'Montserrat', Arial, sans-serif; color:#000000;">
-            <div style="font-weight:bold; font-size:14px; line-height:1.4; padding-bottom:8px;">
-              Know someone who might enjoy this?
-            </div>
-            <div style="font-size:13px; line-height:1.5; padding-bottom:14px;">
-              Forward Motif to them. If you found this newsletter through someone else, you can join us here.
-            </div>
-            <a href="https://motifnewsletter.com" target="_blank" style="color:#000000; text-decoration:underline; font-size:13px; line-height:1.5;">
-              Subscribe to Motif →
-            </a>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-
-  <!-- FOOTER -->
-  <tr>
-    <td class="espacamento-lateral" style="padding:15px 32px 30px;">
-      <table role="presentation" cellspacing="0" cellpadding="0" width="100%" align="left" border="0" style="border-top:2px solid #000000; padding-top:20px;">
-        <tr>
-          <td style="font-family:'Montserrat', Arial, sans-serif; font-size:12px; line-height:1.5; color:{text_muted};">
-            You received this email because you subscribe to the Motif Newsletter.<br>
-            Good Music for Good People.
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-
+<table role="presentation" class="body_table" cellspacing="0" cellpadding="0" width="100%" border="0" bgcolor="{BG_PAGE}" style="background-color:{BG_PAGE}; border-left:5px solid {ACCENT};">
+{body}
 </table>
 
 </td>
 </tr>
 </table>
+<!--[if mso]></td></tr></table><![endif]-->
 
 </body>
 </html>
 """
-
-    return html

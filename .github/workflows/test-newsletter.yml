@@ -22,6 +22,8 @@ jobs:
       KIT_SENDER_EMAIL: newsletter@motifnewsletter.com
       KIT_PUBLISH_TO_WEB: "false"
       KIT_SEND_DELAY_MINUTES: "1"
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      LASTFM_USERNAME: igor8
     steps:
       - name: Baixar o projeto
         uses: actions/checkout@v4

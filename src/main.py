@@ -4,8 +4,10 @@ from zoneinfo import ZoneInfo
 from bootstrap import get_newsletter_sender
 from channels import CHANNELS
 from collector import get_feed
-from environment import get_edition_id
+from environment import get_edition_id, get_runtime_branch
+from genres import add_genres
 from newsletter import generate_html, generate_subject
+from song_of_the_week import get_song_of_the_week, save_to_history
 
 
 def get_edition_date(today=None):
@@ -38,7 +40,9 @@ def main(newsletter_sender=None):
         print("Nenhum vídeo novo encontrado. Nenhum e-mail foi enviado.")
         return
 
-    html = generate_html(all_videos, edition_date)
+    add_genres(all_videos, CHANNELS)
+    pick = get_song_of_the_week()
+    html = generate_html(all_videos, edition_date, pick=pick)
 
     with open("newsletter.html", "w", encoding="utf-8") as file:
         file.write(html)
@@ -55,6 +59,12 @@ def main(newsletter_sender=None):
 
     if result == "created":
         print(f"A edição {edition_id} foi aceita pelo Kit.")
+
+        # Só a produção alimenta o histórico: envios de teste podem repetir
+        # músicas à vontade sem "gastar" recomendações.
+        if pick and get_runtime_branch() == "main":
+            save_to_history(pick, edition_id)
+            print(f"Song of the Week registrada: {pick['artist']} — {pick['title']}.")
         return
 
     print(f"Nenhum novo envio foi criado para a edição {edition_id}.")
