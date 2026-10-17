@@ -110,6 +110,40 @@ def fetch_video_durations(video_ids):
     return durations
 
 
+def fetch_video_topics(video_ids):
+    """Busca as categorias de assunto (topicCategories) de vários vídeos.
+
+    O YouTube devolve links da Wikipédia, como
+    "https://en.wikipedia.org/wiki/Rock_music". A API aceita até 50 IDs por
+    chamada, então a lista é dividida em lotes.
+    """
+    if not video_ids:
+        return {}
+
+    if not YOUTUBE_API_KEY:
+        raise RuntimeError(
+            "A variável YOUTUBE_API_KEY não foi configurada. "
+            "Veja o README para saber como criar e configurar a chave."
+        )
+
+    topics = {}
+
+    for start in range(0, len(video_ids), 50):
+        params = {
+            "part": "topicDetails",
+            "id": ",".join(video_ids[start:start + 50]),
+            "key": YOUTUBE_API_KEY,
+        }
+
+        response = requests.get(VIDEO_API_URL, params=params, timeout=30)
+        response.raise_for_status()
+
+        for item in response.json().get("items", []):
+            topics[item["id"]] = item.get("topicDetails", {}).get("topicCategories", [])
+
+    return topics
+
+
 def get_feed(channel_name, config, since=None):
     playlist_id = get_uploads_playlist_id(config["id"])
     min_duration = config.get("min_duration")
@@ -145,6 +179,7 @@ def get_feed(channel_name, config, since=None):
 
             candidates.append({
                 "channel": channel_name,
+                "section": config.get("section", "live"),
                 "title": title,
                 "published": published,
                 "link": f"https://www.youtube.com/watch?v={video_id}",

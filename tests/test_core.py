@@ -86,6 +86,31 @@ class CollectorTests(unittest.TestCase):
         )
 
 
+    def test_pitchfork_keeps_only_full_over_under_episodes(self):
+        from channels import CHANNELS
+
+        recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        uploads = {
+            "full": ("Audrey Hobert Rates Podcasts, Don Toliver, and Disney Adults | Pitchfork", 599),
+            "clip": ("Audrey Hobert Rates Don Toliver", 31),
+            "teaser": ("Audrey Hobert Does Pitchfork's Over/Under", 10),
+            "other": ("Judeline's Perfect 10", 162),
+        }
+        playlist_response = {"items": [
+            {"snippet": {"title": title, "publishedAt": recent, "resourceId": {"videoId": video_id}}}
+            for video_id, (title, _) in uploads.items()
+        ]}
+
+        with patch.object(collector, "fetch_playlist_page", return_value=playlist_response), \
+            patch.object(collector, "fetch_video_durations", side_effect=lambda ids: {
+                video_id: uploads[video_id][1] for video_id in ids
+            }):
+            feed = collector.get_feed("Pitchfork", CHANNELS["Pitchfork"])
+
+        self.assertEqual([video["video_id"] for video in feed], ["full"])
+        self.assertEqual(feed[0]["section"], "extras")
+
+
 class EnvironmentTests(unittest.TestCase):
     def test_main_branch_uses_production_audience(self):
         self.assertEqual(get_audience_tag("main"), "music-weekly")
@@ -213,6 +238,106 @@ class DateTests(unittest.TestCase):
             generate_subject(date(2026, 8, 28)),
             "A Week in Music · August 28, 2026",
         )
+
+    def test_extras_are_rendered_in_separate_section_after_live_videos(self):
+        from newsletter import generate_html
+
+        def video(channel, title, section=None):
+            item = {"channel": channel, "title": title, "link": "https://www.youtube.com/watch?v=x"}
+            if section:
+                item["section"] = section
+            return item
+
+        html = generate_html([
+            video("Amoeba Music", "Bag Video", "extras"),
+            video("KEXP", "Live Video"),
+        ], date(2026, 8, 28))
+
+        self.assertLess(html.index("Live Video"), html.index("Know someone who might enjoy this?"))
+        self.assertLess(html.index("Know someone who might enjoy this?"), html.index("Beyond the Stage"))
+        self.assertLess(html.index("Beyond the Stage"), html.index("Bag Video"))
+        self.assertEqual(html.count("Beyond the Stage"), 1)
+        self.assertEqual(html.count("Know someone who might enjoy this?"), 1)
+
+    def test_pick_is_rendered_before_live_videos(self):
+        from newsletter import generate_html
+
+        html = generate_html([{
+            "channel": "KEXP",
+            "title": "Live Video",
+            "link": "https://www.youtube.com/watch?v=x",
+        }], date(2026, 8, 28), pick={
+            "artist": "Fontaines D.C.",
+            "title": "Starburster",
+            "album": "Romance",
+            "image": "https://example.com/cover.jpg",
+        })
+
+        pick_start = html.index("Song of the Week")
+        pick_end = html.index("Live Video")
+        pick_html = html[pick_start:pick_end]
+
+        self.assertLess(pick_start, pick_end)
+        self.assertIn("Starburster", pick_html)
+        self.assertIn("Fontaines D.C.", pick_html)
+        self.assertIn("Romance", pick_html)
+        self.assertIn('src="https://example.com/cover.jpg"', pick_html)
+        self.assertNotIn("<a ", pick_html)
+
+    def test_pick_section_is_omitted_without_pick(self):
+        from newsletter import generate_html
+
+        html = generate_html([], date(2026, 8, 28))
+
+        self.assertNotIn("Song of the Week", html)
+
+    def test_sign_off_closes_the_edition_before_the_footer(self):
+        from newsletter import generate_html
+
+        html = generate_html([], date(2026, 8, 28))
+
+        self.assertLess(html.index("See you next Friday."), html.index("You're receiving this"))
+
+    def test_extras_section_is_omitted_without_extra_videos(self):
+        from newsletter import generate_html
+
+        html = generate_html([{
+            "channel": "KEXP",
+            "title": "Live Video",
+            "link": "https://www.youtube.com/watch?v=x",
+        }], date(2026, 8, 28))
+
+        self.assertNotIn("Beyond the Stage", html)
+        self.assertEqual(html.count("Know someone who might enjoy this?"), 1)
+
+    def test_week_without_extras_videos_sends_edition_without_beyond_the_stage(self):
+        import main
+
+        sender = unittest.mock.Mock()
+        sender.send.return_value = "created"
+
+        # Canais de música ao vivo publicaram; os canais do bloco de extras não.
+        def get_feed(name, config, since=None):
+            if config.get("section") == "extras":
+                return []
+            return [{
+                "channel": name,
+                "section": config.get("section", "live"),
+                "title": f"{name} Session",
+                "link": "https://www.youtube.com/watch?v=x",
+            }]
+
+        with patch.object(main, "get_edition_date", return_value=date(2026, 8, 28)), \
+            patch.dict("os.environ", {"GITHUB_REF_NAME": "main"}, clear=True), \
+            patch.object(main, "get_newsletter_sender", return_value=sender), \
+            patch.object(main, "get_feed", side_effect=get_feed), \
+            patch.object(main, "get_song_of_the_week", return_value=None):
+            main.main()
+
+        html = sender.send.call_args.args[1]
+        self.assertIn("KEXP Session", html)
+        self.assertNotIn("Beyond the Stage", html)
+        self.assertNotIn("Watch video", html)
 
 
 class BootstrapTests(unittest.TestCase):
@@ -481,6 +606,382 @@ class KitSenderTests(unittest.TestCase):
                 )
 
         urlopen.assert_called_once()
+
+
+class SongOfTheWeekTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.history_path = Path(self.tempdir.name) / "song_history.json"
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def track(self, title, plays=1, artist="Artist"):
+        return {"artist": artist, "title": title, "plays": plays}
+
+    def test_never_picks_a_song_already_in_history(self):
+        import random
+        from song_of_the_week import choose_track
+
+        tracks = [self.track("Old"), self.track("New")]
+        history = [{"artist": "ARTIST", "title": " old "}]
+
+        for seed in range(50):
+            self.assertEqual(
+                choose_track(tracks, history, random.Random(seed))["title"],
+                "New",
+            )
+
+    def test_only_top_ten_new_songs_are_candidates(self):
+        import random
+        from song_of_the_week import choose_track
+
+        tracks = [self.track(f"Song {index}") for index in range(15)]
+        history = [{"artist": "Artist", "title": "Song 0"}]
+
+        picked = {
+            choose_track(tracks, history, random.Random(seed))["title"]
+            for seed in range(300)
+        }
+
+        self.assertEqual(picked, {f"Song {index}" for index in range(1, 11)})
+
+    def test_songs_with_more_plays_are_picked_more_often(self):
+        import random
+        from song_of_the_week import choose_track
+
+        tracks = [self.track("Many", plays=16), self.track("Few", plays=1)]
+        rng = random.Random(0)
+
+        picks = [choose_track(tracks, [], rng)["title"] for _ in range(2000)]
+
+        # Peso = raiz dos plays: 4 contra 1, ou seja, ~80% para "Many".
+        self.assertAlmostEqual(picks.count("Many") / len(picks), 0.8, delta=0.04)
+
+    def test_prefers_artists_not_recommended_recently(self):
+        import random
+        from song_of_the_week import choose_track
+
+        tracks = [
+            self.track("Hit", plays=50, artist="Recent"),
+            self.track("Deep Cut", plays=1, artist="Fresh"),
+        ]
+        history = [{"artist": "recent", "title": "Older Song"}]
+
+        for seed in range(50):
+            self.assertEqual(
+                choose_track(tracks, history, random.Random(seed))["artist"],
+                "Fresh",
+            )
+
+    def test_recent_artist_is_still_picked_when_there_is_no_alternative(self):
+        from song_of_the_week import choose_track
+
+        tracks = [self.track("Another Song", artist="Recent")]
+        history = [{"artist": "Recent", "title": "Older Song"}]
+
+        self.assertEqual(choose_track(tracks, history)["title"], "Another Song")
+
+    def test_artists_from_older_editions_are_no_longer_avoided(self):
+        import random
+        from song_of_the_week import RECENT_ARTIST_EDITIONS, choose_track
+
+        history = [{"artist": "Old Favorite", "title": "First"}] + [
+            {"artist": f"Artist {index}", "title": "Song"}
+            for index in range(RECENT_ARTIST_EDITIONS)
+        ]
+        tracks = [
+            self.track("Second", plays=1, artist="Old Favorite"),
+            self.track("Other", plays=1, artist="Someone"),
+        ]
+
+        picked = {
+            choose_track(tracks, history, random.Random(seed))["artist"]
+            for seed in range(100)
+        }
+
+        self.assertEqual(picked, {"Old Favorite", "Someone"})
+
+    def test_returns_none_when_every_song_was_recommended(self):
+        from song_of_the_week import choose_track
+
+        self.assertIsNone(choose_track(
+            [self.track("Old")],
+            [{"artist": "Artist", "title": "Old"}],
+        ))
+
+    def test_falls_back_to_last_month_when_week_has_no_new_song(self):
+        import song_of_the_week
+
+        def top_tracks(username, period):
+            return [self.track("Old")] if period == "7day" else [self.track("Monthly")]
+
+        song_of_the_week.save_to_history(
+            {"artist": "Artist", "title": "Old"}, "2026-08-21", self.history_path,
+        )
+
+        with patch.dict("os.environ", {"LASTFM_API_KEY": "key"}), \
+            patch.object(song_of_the_week.lastfm, "get_top_tracks", side_effect=top_tracks), \
+            patch.object(song_of_the_week.lastfm, "get_track_info", return_value={"album": "Record", "image": "https://example.com/c.jpg"}):
+            pick = song_of_the_week.get_song_of_the_week("user", self.history_path)
+
+        self.assertEqual(pick, {
+            "artist": "Artist",
+            "title": "Monthly",
+            "album": "Record",
+            "image": "https://example.com/c.jpg",
+        })
+
+    def test_lastfm_failure_does_not_block_the_newsletter(self):
+        import song_of_the_week
+
+        with patch.dict("os.environ", {"LASTFM_API_KEY": "key"}), \
+            patch.object(song_of_the_week.lastfm, "get_top_tracks", side_effect=RuntimeError("offline")):
+            self.assertIsNone(song_of_the_week.get_song_of_the_week("user", self.history_path))
+
+    def test_missing_cover_keeps_the_song(self):
+        import song_of_the_week
+
+        with patch.dict("os.environ", {"LASTFM_API_KEY": "key"}), \
+            patch.object(song_of_the_week.lastfm, "get_top_tracks", return_value=[self.track("New")]), \
+            patch.object(song_of_the_week.lastfm, "get_track_info", side_effect=RuntimeError("404")):
+            pick = song_of_the_week.get_song_of_the_week("user", self.history_path)
+
+        self.assertEqual(pick["title"], "New")
+        self.assertIsNone(pick["album"])
+        self.assertIsNone(pick["image"])
+
+    def test_track_info_ignores_lastfm_placeholder_cover(self):
+        import lastfm
+
+        placeholder = "https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png"
+        response = {"track": {"album": {"title": "Record", "image": [{"#text": placeholder}]}}}
+
+        with patch.object(lastfm, "call_api", return_value=response):
+            self.assertEqual(
+                lastfm.get_track_info("Artist", "Song"),
+                {"album": "Record", "image": None},
+            )
+
+    def test_track_info_without_album(self):
+        import lastfm
+
+        with patch.object(lastfm, "call_api", return_value={"track": {"name": "Song"}}):
+            self.assertEqual(
+                lastfm.get_track_info("Artist", "Song"),
+                {"album": None, "image": None},
+            )
+
+    def run_main(self, branch, result):
+        import main
+        from song_of_the_week import load_history, save_to_history
+
+        sender = unittest.mock.Mock()
+        sender.send.return_value = result
+        pick = {"artist": "Artist", "title": "Song", "image": None}
+        video = {"channel": "KEXP", "title": "Video", "link": "https://www.youtube.com/watch?v=x"}
+
+        with patch.object(main, "get_edition_date", return_value=date(2026, 8, 28)), \
+            patch.dict("os.environ", {"GITHUB_REF_NAME": branch, "GITHUB_RUN_ID": "1"}, clear=True), \
+            patch.object(main, "get_newsletter_sender", return_value=sender), \
+            patch.object(main, "get_feed", return_value=[video]), \
+            patch.object(main, "get_song_of_the_week", return_value=pick), \
+            patch.object(main, "save_to_history", side_effect=lambda pick, edition_id: save_to_history(pick, edition_id, self.history_path)):
+            main.main()
+
+        return load_history(self.history_path)
+
+    def test_production_send_records_the_song(self):
+        history = self.run_main("main", "created")
+
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["edition"], "2026-08-28")
+        self.assertEqual(history[0]["title"], "Song")
+
+    def test_test_branch_does_not_record_the_song(self):
+        self.assertEqual(self.run_main("test", "created"), [])
+
+    def test_existing_broadcast_does_not_record_the_song(self):
+        self.assertEqual(self.run_main("main", "completed"), [])
+
+
+class GenreTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.cache_path = Path(self.tempdir.name) / "artist_genres.json"
+        self.overrides_path = Path(self.tempdir.name) / "genre_overrides.json"
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_artist_is_extracted_from_each_channel_title_format(self):
+        from channels import CHANNELS
+        from genres import extract_artist
+
+        examples = [
+            ("KEXP", "Death Cab For Cutie - Full Performance (Live on KEXP)", "Death Cab For Cutie"),
+            ("Tiny Desk", "Tim Bernardes: Tiny Desk Concert", "Tim Bernardes"),
+            ("Audiotree", "Cold Steel on Audiotree Live (Full Session)", "Cold Steel"),
+            ("La Blogothèque", "Peter Broderick | The Sounds of Ireland", "Peter Broderick"),
+            ("La Blogothèque", "Rostam - The Road to Death | Live Session", "Rostam"),
+            ("KCRW", "Sébastien Tellier: Live on KCRW", "Sébastien Tellier"),
+            ("Cultura Livre", "CULTURA LIVRE | Fera Neném | 10/10/26", "Fera Neném"),
+            ("Cultura Livre", "Fera Neném no Cultura Livre", "Fera Neném"),
+        ]
+
+        for channel, title, artist in examples:
+            with self.subTest(title=title):
+                self.assertEqual(
+                    extract_artist(title, CHANNELS[channel]["artist_patterns"]),
+                    artist,
+                )
+
+    def test_compound_names_are_split_and_accents_removed(self):
+        from genres import artist_candidates
+
+        self.assertEqual(
+            artist_candidates("Hélio Ziskind e Fera Neném"),
+            [
+                "Hélio Ziskind e Fera Neném", "Helio Ziskind e Fera Nenem",
+                "Hélio Ziskind", "Helio Ziskind", "Fera Neném", "Fera Nenem",
+            ],
+        )
+        self.assertEqual(
+            artist_candidates("Scott Ian of Anthrax"),
+            ["Scott Ian of Anthrax", "Scott Ian", "Anthrax"],
+        )
+
+    def test_only_tags_that_are_genres_are_used(self):
+        from genres import pick_genre
+
+        self.assertEqual(pick_genre([
+            ("motherfuckin rabbits ejaculating sunshine", 100),
+            ("brazilian", 90),
+            ("saxophone", 80),
+            ("seen live", 70),
+            ("Indie Rock", 60),
+        ]), "indie rock")
+        self.assertEqual(pick_genre([("Alt-country", 100)]), "alt-country")
+        self.assertIsNone(pick_genre([("french", 100), ("jazz", 2)]))
+
+    def add_genres(self, videos, overrides=None, cache=None, **patches):
+        import genres
+
+        if overrides is not None:
+            genres.save_json(overrides, self.overrides_path)
+        if cache is not None:
+            genres.save_json(cache, self.cache_path)
+
+        channels = {"KEXP": {"artist_patterns": [r"^(?P<artist>.+?)\s+-\s+Full Performance"]}}
+
+        with patch.dict("os.environ", {"LASTFM_API_KEY": "key"}), \
+            patch.object(genres.lastfm, "get_artist_tags", **patches.get("lastfm", {"return_value": []})) as lastfm_tags, \
+            patch.object(genres.collector, "fetch_video_topics", **patches.get("youtube", {"return_value": {}})):
+            genres.add_genres(videos, channels, self.cache_path, self.overrides_path)
+
+        return lastfm_tags
+
+    def video(self, artist="Wednesday"):
+        return {
+            "channel": "KEXP",
+            "title": f"{artist} - Full Performance (Live on KEXP)",
+            "video_id": "abc",
+        }
+
+    def test_lastfm_genre_is_used_and_cached(self):
+        import genres
+
+        video = self.video()
+        self.add_genres([video], lastfm={"return_value": [("shoegaze", 100)]})
+
+        self.assertEqual(video["genre"], "shoegaze")
+        self.assertEqual(genres.load_json(self.cache_path), {"wednesday": "shoegaze"})
+
+    def test_cached_genre_skips_lastfm(self):
+        video = self.video()
+        lastfm_tags = self.add_genres([video], cache={"wednesday": "indie rock"})
+
+        self.assertEqual(video["genre"], "indie rock")
+        lastfm_tags.assert_not_called()
+
+    def test_manual_override_wins_and_empty_override_hides_the_badge(self):
+        corrected, hidden = self.video("Wednesday"), self.video("Rostam")
+        self.add_genres(
+            [corrected, hidden],
+            overrides={"WEDNESDAY": "indie rock", "Rostam": ""},
+            cache={"wednesday": "shoegaze"},
+            youtube={"return_value": {"abc": ["https://en.wikipedia.org/wiki/Pop_music"]}},
+        )
+
+        self.assertEqual(corrected["genre"], "indie rock")
+        self.assertIsNone(hidden["genre"])
+
+    def test_youtube_topic_is_the_fallback(self):
+        video = self.video()
+        self.add_genres([video], youtube={"return_value": {"abc": [
+            "https://en.wikipedia.org/wiki/Music",
+            "https://en.wikipedia.org/wiki/Rock_music",
+        ]}})
+
+        self.assertEqual(video["genre"], "rock")
+
+    def test_failures_leave_videos_without_badge(self):
+        video = self.video()
+        self.add_genres(
+            [video],
+            lastfm={"side_effect": RuntimeError("offline")},
+            youtube={"side_effect": RuntimeError("quota")},
+        )
+
+        self.assertIsNone(video["genre"])
+
+    def test_beyond_the_stage_videos_are_not_looked_up(self):
+        video = {
+            "channel": "KEXP",
+            "section": "extras",
+            "title": "Wednesday - Full Performance (Live on KEXP)",
+            "video_id": "abc",
+        }
+        lastfm_tags = self.add_genres([video], youtube={"return_value": {"abc": [
+            "https://en.wikipedia.org/wiki/Rock_music",
+        ]}})
+
+        self.assertIsNone(video["genre"])
+        lastfm_tags.assert_not_called()
+
+    def test_beyond_the_stage_videos_never_show_a_badge(self):
+        from newsletter import generate_html
+
+        html = generate_html([
+            {"channel": "KEXP", "title": "Live Video", "link": "https://www.youtube.com/watch?v=x", "genre": "folk"},
+            {"channel": "Amoeba Music", "section": "extras", "title": "Bag Video",
+             "link": "https://www.youtube.com/watch?v=y", "genre": "new wave"},
+        ], date(2026, 8, 28))
+
+        self.assertIn("&nbsp;Folk&nbsp;</span>", html)
+        self.assertNotIn("New wave", html)
+
+    def test_genre_badge_is_rendered_before_the_link(self):
+        from newsletter import generate_html
+
+        video = {"channel": "KEXP", "title": "Live Video", "link": "https://www.youtube.com/watch?v=x"}
+        with_genre = generate_html([dict(video, genre="mpb")], date(2026, 8, 28))
+        without_genre = generate_html([dict(video, genre=None)], date(2026, 8, 28))
+
+        self.assertIn("&nbsp;MPB&nbsp;</span>", with_genre)
+        self.assertLess(with_genre.index("MPB"), with_genre.index("Watch performance"))
+        self.assertNotIn("<span", without_genre)
+
+    def test_genre_formatting(self):
+        from newsletter import format_genre
+
+        self.assertEqual(format_genre("indie rock"), "Indie rock")
+        self.assertEqual(format_genre("r&b"), "R&B")
+        self.assertEqual(format_genre("alt-country"), "Alt-country")
 
 
 if __name__ == "__main__":
