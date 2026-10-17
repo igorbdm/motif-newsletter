@@ -20,6 +20,43 @@ O projeto usa a YouTube Data API v3 para ler os uploads de cada canal, seleciona
 2. Copie `.env.example` para um arquivo chamado `.env` e cole a chave em `YOUTUBE_API_KEY`.
 3. No GitHub, adicione a mesma chave como um "Repository secret" chamado `YOUTUBE_API_KEY` (Settings → Secrets and variables → Actions). O workflow já está configurado para usá-la.
 
+## Song of the Week (Last.fm)
+
+A seção Song of the Week recomenda uma música a partir do que foi ouvido no Last.fm na última semana (`src/song_of_the_week.py`):
+
+1. Busca as músicas mais ouvidas dos últimos 7 dias.
+2. Remove as que já foram recomendadas, conforme o histórico em `data/song_history.json`.
+3. Dá preferência a artistas que não foram recomendados nas últimas 4 edições. Se só houver artistas recentes, eles continuam valendo, e a seção nunca fica vazia por causa disso.
+4. Sorteia uma entre as 10 mais ouvidas que sobraram. Músicas com mais plays têm um pouco mais de chance (peso = raiz quadrada dos plays).
+5. Se não houver nenhuma música nova na semana, tenta o último mês. Se ainda assim não houver, ou se o Last.fm estiver fora do ar, a edição sai sem a seção.
+
+Depois de cada envio de produção, o workflow salva a música no histórico e faz commit em `data/song_history.json`. Envios de teste não alteram o histórico. Para impedir que uma música seja recomendada, basta adicioná-la ao arquivo manualmente.
+
+Configure `LASTFM_API_KEY` e `LASTFM_USERNAME` no `.env`. No GitHub, a chave fica no secret `LASTFM_API_KEY` e o usuário está definido nos workflows. A chave é criada em https://www.last.fm/api/account/create.
+
+## Gênero musical dos vídeos
+
+Cada vídeo das Live Sessions ganha um selo com o gênero do artista, ao lado do link (`src/genres.py`). Os vídeos do Beyond the Stage não levam selo.
+
+1. O nome do artista é encontrado no título do vídeo, usando os padrões de cada canal (`artist_patterns` em `src/channels.py`). Nomes compostos ("Gillian Welch & David Rawlings") também são tentados por partes, e com e sem acentos.
+2. Se o artista estiver em `data/genre_overrides.json`, vale o gênero de lá.
+3. Senão, usa o gênero já descoberto em semanas anteriores (`data/artist_genres.json`) ou pergunta ao Last.fm. Só valem marcações que contenham uma palavra de gênero conhecida, o que descarta ruído como "seen live" ou "brazilian".
+4. Se nada disso funcionar, usa a categoria do vídeo no YouTube ("Rock", "Jazz", "Pop").
+
+Se o gênero não for encontrado, o vídeo aparece sem selo. Os gêneros descobertos são salvos pelo workflow junto com o histórico de músicas.
+
+Para corrigir um gênero ou esconder o selo de um artista, edite `data/genre_overrides.json`:
+
+```json
+{
+  "Fera Neném": "MPB",
+  "James Blake": "electronic",
+  "Artista sem selo": ""
+}
+```
+
+Para fazer o Last.fm ser consultado de novo para um artista, apague a linha dele em `data/artist_genres.json`. Ao adicionar um canal novo, inclua `artist_patterns` para que os vídeos dele também ganhem o selo.
+
 ## Configuração do e-mail
 
 Copie `.env.example` para um arquivo chamado `.env` e preencha os dados do SMTP. Esse arquivo não é enviado ao GitHub.
@@ -72,7 +109,7 @@ Por enquanto, `EMAIL_TO` aceita um endereço (como antes) ou uma lista separada 
 
 ## GitHub Actions
 
-O workflow tenta executar 12 vezes às 09:48, 10:03, 10:18, 10:33, 10:48, 11:03, 11:18, 11:33, 11:48, 12:03, 12:18 e 12:33, sempre às sextas-feiras no fuso `America/Sao_Paulo`. Cada tentativa consulta primeiro o Kit pela identidade da edição e não cria outro Broadcast quando aquela identidade já possui um envio ativo ou concluído. Na produção, a identidade é a sexta-feira; no teste, cada execução manual recebe um ID único do GitHub. O workflow de produção também pode ser iniciado manualmente pela aba **Actions**. O workflow de teste é somente manual e deve ser executado selecionando a branch `test`. Antes de ativá-los, crie no GitHub os secrets `YOUTUBE_API_KEY` e `KIT_API_KEY`.
+O workflow tenta executar 12 vezes às 09:48, 10:03, 10:18, 10:33, 10:48, 11:03, 11:18, 11:33, 11:48, 12:03, 12:18 e 12:33, sempre às sextas-feiras no fuso `America/Sao_Paulo`. Cada tentativa consulta primeiro o Kit pela identidade da edição e não cria outro Broadcast quando aquela identidade já possui um envio ativo ou concluído. Na produção, a identidade é a sexta-feira; no teste, cada execução manual recebe um ID único do GitHub. O workflow de produção também pode ser iniciado manualmente pela aba **Actions**. O workflow de teste é somente manual e deve ser executado selecionando a branch `test`. Antes de ativá-los, crie no GitHub os secrets `YOUTUBE_API_KEY`, `KIT_API_KEY` e `LASTFM_API_KEY`.
 
 ## Adicionar ou ajustar canais
 

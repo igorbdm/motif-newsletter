@@ -29,7 +29,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # Necessário para salvar o histórico de músicas e o cache de gêneros.
+  contents: write
 
 concurrency:
   group: music-weekly-send
@@ -46,6 +47,8 @@ jobs:
       KIT_SENDER_EMAIL: newsletter@motifnewsletter.com
       KIT_PUBLISH_TO_WEB: "false"
       KIT_SEND_DELAY_MINUTES: "1"
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      LASTFM_USERNAME: igor8
     steps:
       - name: Baixar o projeto
         uses: actions/checkout@v4
@@ -60,3 +63,16 @@ jobs:
 
       - name: Gerar e enviar newsletter
         run: python src/main.py
+
+      - name: Salvar histórico de músicas e gêneros descobertos
+        run: |
+          git add data/
+          if git diff --cached --quiet; then
+            echo "Nada novo em data/."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Atualiza Song of the Week e gêneros da edição"
+          git pull --rebase
+          git push
