@@ -1,4 +1,5 @@
 import os
+import re
 
 import requests
 
@@ -175,6 +176,10 @@ def get_feed(channel_name, config, since=None):
                 continue
 
             if contains_any(title, config.get("ignore", [])):
+                continue
+
+            # Quando palavras não bastam, o título precisa seguir um formato.
+            if config.get("title_pattern") and not re.search(config["title_pattern"], title, re.IGNORECASE):
                 continue
 
             candidates.append({

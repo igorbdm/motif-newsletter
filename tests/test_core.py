@@ -818,27 +818,76 @@ class GenreTests(unittest.TestCase):
     def tearDown(self):
         self.tempdir.cleanup()
 
-    def test_artist_is_extracted_from_each_channel_title_format(self):
+    def test_each_channel_title_becomes_artist_and_program(self):
         from channels import CHANNELS
-        from genres import extract_artist
+        from titles import display_title
 
         examples = [
-            ("KEXP", "Death Cab For Cutie - Full Performance (Live on KEXP)", "Death Cab For Cutie"),
-            ("Tiny Desk", "Tim Bernardes: Tiny Desk Concert", "Tim Bernardes"),
-            ("Audiotree", "Cold Steel on Audiotree Live (Full Session)", "Cold Steel"),
-            ("La Blogothèque", "Peter Broderick | The Sounds of Ireland", "Peter Broderick"),
-            ("La Blogothèque", "Rostam - The Road to Death | Live Session", "Rostam"),
-            ("KCRW", "Sébastien Tellier: Live on KCRW", "Sébastien Tellier"),
-            ("Cultura Livre", "CULTURA LIVRE | Fera Neném | 10/10/26", "Fera Neném"),
-            ("Cultura Livre", "Fera Neném no Cultura Livre", "Fera Neném"),
+            ("KEXP", "Death Cab For Cutie - Full Performance (Live on KEXP)", "Death Cab For Cutie — Live on KEXP"),
+            ("Tiny Desk", "Tim Bernardes: Tiny Desk Concert", "Tim Bernardes — Tiny Desk Concert"),
+            ("Audiotree", "Cold Steel on Audiotree Live (Full Session)", "Cold Steel — Audiotree Live"),
+            ("La Blogothèque", "Naomi Greene | A Take Away Show", "Naomi Greene — A Take Away Show"),
+            ("La Blogothèque", "Piers Faccini & Ballaké Sissoko | A Take Away Show at @sudsarles", "Piers Faccini & Ballaké Sissoko — A Take Away Show"),
+            ("La Blogothèque", "Adèle Castillon | Live Session for The Collective by Stradivarius", "Adèle Castillon — Live Session"),
+            ("KCRW", "Sébastien Tellier: Live on KCRW", "Sébastien Tellier — Live on KCRW"),
+            ("Cultura Livre", "CULTURA LIVRE | Fera Neném | 10/10/26", "Fera Neném — Cultura Livre"),
+            # A grafia do artista é a do título do vídeo.
+            ("Cultura Livre", "NIGÉRIA FUTEBOL CLUBE NO CULTURA LIVRE", "NIGÉRIA FUTEBOL CLUBE — Cultura Livre"),
+            ("Amoeba Music", 'Elvis Costello\'s "What\'s In My Bag?" | Amoeba Music', "Elvis Costello — What's In My Bag?"),
+            ("Amoeba Music", "Daniel Lanois | What's in My Bag? (Teaser)", "Daniel Lanois — What's In My Bag?"),
+            ("Pitchfork", "Audrey Hobert Rates Podcasts, Don Toliver, and Disney Adults | Pitchfork", "Audrey Hobert — Over/Under"),
         ]
 
-        for channel, title, artist in examples:
+        for channel, title, expected in examples:
             with self.subTest(title=title):
-                self.assertEqual(
-                    extract_artist(title, CHANNELS[channel]["artist_patterns"]),
-                    artist,
-                )
+                self.assertEqual(display_title(title, CHANNELS[channel]), expected)
+
+    def test_title_outside_the_pattern_is_kept_as_is(self):
+        from channels import CHANNELS
+        from titles import display_title
+
+        title = "KEXP Holiday Special 2026"
+        self.assertEqual(display_title(title, CHANNELS["KEXP"]), title)
+        self.assertEqual(display_title(title, {}), title)
+
+    def test_la_blogotheque_keeps_only_complete_sessions(self):
+        from channels import CHANNELS
+
+        recent = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        uploads = {
+            "full_take_away": "Naomi Greene | A Take Away Show",
+            "full_live_session": "Adèle Castillon | Live Session for The Collective by Stradivarius",
+            "fragment_live_session": "Rostam - The Road to Death | Live Session",
+            "fragment_take_away": "Voxtrot - Trouble | A Take Away Show",
+            "festival": "Thylacine | Live at @arteconcert Festival 2022 (Paris)",
+            "series": "Peter Broderick | The Sounds of Ireland",
+        }
+        playlist_response = {"items": [
+            {"snippet": {"title": title, "publishedAt": recent, "resourceId": {"videoId": video_id}}}
+            for video_id, title in uploads.items()
+        ]}
+
+        with patch.object(collector, "fetch_playlist_page", return_value=playlist_response), \
+            patch.object(collector, "fetch_video_durations", side_effect=lambda ids: {video_id: 900 for video_id in ids}):
+            feed = collector.get_feed("La Blogothèque", CHANNELS["La Blogothèque"])
+
+        self.assertEqual(
+            sorted(video["video_id"] for video in feed),
+            ["full_live_session", "full_take_away"],
+        )
+
+    def test_email_shows_the_standardized_title(self):
+        from newsletter import generate_html
+
+        html = generate_html([{
+            "channel": "KEXP",
+            "title": "Death Cab For Cutie - Full Performance (Live on KEXP)",
+            "display_title": "Death Cab For Cutie — Live on KEXP",
+            "link": "https://www.youtube.com/watch?v=x",
+        }], date(2026, 8, 28))
+
+        self.assertIn("Death Cab For Cutie — Live on KEXP", html)
+        self.assertNotIn("Full Performance", html)
 
     def test_compound_names_are_split_and_accents_removed(self):
         from genres import artist_candidates

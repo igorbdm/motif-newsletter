@@ -34,6 +34,10 @@ Depois de cada envio de produção, o workflow salva a música no histórico e f
 
 Configure `LASTFM_API_KEY` e `LASTFM_USERNAME` no `.env`. No GitHub, a chave fica no secret `LASTFM_API_KEY` e o usuário está definido nos workflows. A chave é criada em https://www.last.fm/api/account/create.
 
+## Títulos dos vídeos
+
+No e-mail, o título de cada vídeo é padronizado como **Artista — Programa** (`src/titles.py`), por exemplo "Death Cab For Cutie — Live on KEXP" ou "Elvis Costello — What's In My Bag?". O nome do artista é recortado do título original com os padrões `artist_patterns` de cada canal e mantém a grafia do vídeo. O nome do programa vem de `program`, ou do próprio título quando o canal tem mais de um formato (na La Blogothèque, "A Take Away Show" ou "Live Session"). Se o título não encaixar em nenhum padrão, o vídeo aparece com o título original.
+
 ## Gênero musical dos vídeos
 
 Cada vídeo das Live Sessions ganha um selo com o gênero do artista, ao lado do link (`src/genres.py`). Os vídeos do Beyond the Stage não levam selo.
@@ -113,4 +117,4 @@ O workflow tenta executar 12 vezes às 09:48, 10:03, 10:18, 10:33, 10:48, 11:03,
 
 ## Adicionar ou ajustar canais
 
-Edite `src/channels.py`. Cada canal tem o ID do YouTube, palavras para manter (`keep`) e palavras para ignorar (`ignore`).
+Edite `src/channels.py`. Cada canal tem o ID do YouTube, palavras para manter (`keep`) e palavras para ignorar (`ignore`). Para o título padronizado e o selo de gênero, inclua também `program` e `artist_patterns`; o início do arquivo explica cada campo. Quando palavras não bastam para filtrar, `title_pattern` exige que o título siga um formato. É assim que a La Blogothèque recebe só sessões completas ("Naomi Greene | A Take Away Show") e descarta os vídeos de uma música só ("Rostam - The Road to Death | Live Session").
