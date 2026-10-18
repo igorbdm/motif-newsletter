@@ -190,7 +190,7 @@ def genre_html(video):
 
 
 def video_html(video, is_first):
-    title = escape(str(video["title"]))
+    title = escape(str(video.get("display_title") or video["title"]))
     link = escape(str(video["link"]), quote=True)
     link_label = LINK_LABELS[video.get("section", "live")]
     padding_top = 0 if is_first else 18

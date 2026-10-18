@@ -8,6 +8,7 @@ from environment import get_edition_id, get_runtime_branch
 from genres import add_genres
 from newsletter import generate_html, generate_subject
 from song_of_the_week import get_song_of_the_week, save_to_history
+from titles import add_display_titles
 
 
 def get_edition_date(today=None):
@@ -41,6 +42,7 @@ def main(newsletter_sender=None):
         return
 
     add_genres(all_videos, CHANNELS)
+    add_display_titles(all_videos, CHANNELS)
     pick = get_song_of_the_week()
     html = generate_html(all_videos, edition_date, pick=pick)
 

@@ -28,6 +28,7 @@ from pathlib import Path
 
 import collector
 import lastfm
+from titles import extract_artist
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 CACHE_PATH = DATA_DIR / "artist_genres.json"
@@ -100,14 +101,6 @@ def pick_genre(tags):
     for name, weight in tags:
         if weight >= MIN_TAG_WEIGHT and is_genre(name):
             return name.strip().casefold()
-    return None
-
-
-def extract_artist(title, patterns):
-    for pattern in patterns:
-        match = re.search(pattern, title, re.IGNORECASE)
-        if match:
-            return match.group("artist").strip()
     return None
 
 
