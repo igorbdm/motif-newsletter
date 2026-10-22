@@ -98,7 +98,18 @@ def header_html(edition_date):
   </tr>
 """ + row(label_html(
         today,
-        "A weekly selection of live sessions and music worth your time.",
+        "Hey everyone! Igor from Motif here. Just a quick one today: we’ve got two new things "
+        "in the newsletter. First, a little section where I share a song I’ve been listening to "
+        "throughout the week. And second, a new section featuring music-related videos that aren’t "
+        "live sessions, but shows and other programs about music, like What’s in My Bag by Amoeba "
+        "Music and Over/Under by Pitchfork."
+        "<br><br>"
+        "Thanks to everyone who sent in suggestions for the newsletter. It’s been really nice "
+        "hearing from you, and I’ll have more updates to share soon, too. But for now, I just "
+        "wanted to ask you to share Motif with other people who are into music. It really helps "
+        "the newsletter grow :)"
+        "<br><br>"
+        "Cheers, and see you in the next edition!",
     ), padding_bottom=32)
 
 
