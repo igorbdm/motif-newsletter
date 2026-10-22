@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import lastfm
+from streaming_links import get_streaming_links
 
 HISTORY_PATH = Path(__file__).resolve().parent.parent / "data" / "song_history.json"
 
@@ -95,7 +96,7 @@ def choose_track(tracks, history, rng=random):
 
 
 def get_song_of_the_week(username=None, history_path=HISTORY_PATH, rng=random):
-    """Retorna {"artist", "title", "album", "image"} ou None.
+    """Retorna {"artist", "title", "album", "image", "links"} ou None.
 
     Qualquer problema com o Last.fm é avisado no log, mas não impede o envio
     da newsletter: a edição sai sem a seção.
@@ -128,6 +129,7 @@ def get_song_of_the_week(username=None, history_path=HISTORY_PATH, rng=random):
             "title": track["title"],
             "album": info["album"],
             "image": info["image"],
+            "links": get_streaming_links(track["artist"], track["title"]),
         }
     except Exception as error:
         print(f"Não foi possível escolher a Song of the Week: {error}. Edição sem a seção.")

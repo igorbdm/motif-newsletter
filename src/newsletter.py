@@ -30,6 +30,12 @@ LINK_LABELS = {
     "extras": "Watch video →",
 }
 
+STREAMING_LABELS = {
+    "spotify": "Spotify",
+    "apple_music": "Apple Music",
+    "youtube_music": "YouTube Music",
+}
+
 
 def generate_subject(edition_date: date | None = None):
     edition_date = edition_date or datetime.now().date()
@@ -116,8 +122,8 @@ def header_html(edition_date):
 def generate_pick_html(pick):
     """Música recomendada da semana, escolhida a partir do Last.fm.
 
-    Espera um dicionário com "artist" e "title" e, opcionalmente, "album" e
-    "image" (capa). A seção não tem link: é só uma recomendação.
+    Espera um dicionário com "artist" e "title" e, opcionalmente, "album",
+    "image" (capa) e "links" (Spotify, Apple Music e YouTube Music).
     """
     artist = escape(str(pick["artist"]))
     title = escape(str(pick["title"]))
@@ -128,6 +134,25 @@ def generate_pick_html(pick):
                           <tr>
                             <td style="padding-top:10px; font-family:{FONT}; font-size:13px; line-height:1.4; color:{TEXT_MUTED};">
                               {escape(str(pick["album"]))}
+                            </td>
+                          </tr>"""
+
+    links = ""
+    available = [
+        (label, pick.get("links", {}).get(platform))
+        for platform, label in STREAMING_LABELS.items()
+    ]
+    available = [(label, url) for label, url in available if url]
+    if available:
+        separator = f'&nbsp;<span style="color:{TEXT_MUTED};">·</span>&nbsp;'
+        anchors = separator.join(
+            f'<a href="{escape(str(url), quote=True)}" target="_blank" style="color:{ACCENT}; text-decoration:underline; white-space:nowrap;">{label}</a>'
+            for label, url in available
+        )
+        links = f"""
+                          <tr>
+                            <td style="padding-top:12px; font-family:{FONT}; font-size:13px; line-height:1.6; font-weight:bold;">
+                              {anchors}
                             </td>
                           </tr>"""
 
@@ -161,7 +186,7 @@ def generate_pick_html(pick):
                             <td style="padding-top:4px; font-family:{FONT}; font-size:16px; line-height:1.35; color:{TEXT_MAIN};">
                               {artist}
                             </td>
-                          </tr>{album}
+                          </tr>{album}{links}
                         </table>
                       </td>
                     </tr>

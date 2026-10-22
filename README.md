@@ -32,6 +32,14 @@ A seção Song of the Week recomenda uma música a partir do que foi ouvido no L
 
 Depois de cada envio de produção, o workflow salva a música no histórico e faz commit em `data/song_history.json`. Envios de teste não alteram o histórico. Para impedir que uma música seja recomendada, basta adicioná-la ao arquivo manualmente.
 
+O cartão da música traz links para Spotify, Apple Music e YouTube Music (`src/streaming_links.py`):
+
+- **Apple Music:** link direto para a faixa, encontrado pela busca da Apple (iTunes Search API, sem chave).
+- **YouTube Music:** link direto para a faixa oficial (canal "Artista - Topic"), encontrado pela API do YouTube com a mesma `YOUTUBE_API_KEY` dos vídeos. Cada busca gasta 100 unidades da cota diária.
+- **Spotify:** link de busca. Um link direto exigiria um app no Spotify for Developers.
+
+Só valem resultados com o mesmo artista e o mesmo título. Participações ("feat.") são ignoradas, mas versões ao vivo, remixes e covers não. Se a faixa exata não for encontrada, ou a busca falhar, o link daquela plataforma vira um link de busca e a edição sai normalmente.
+
 Configure `LASTFM_API_KEY` e `LASTFM_USERNAME` no `.env`. No GitHub, a chave fica no secret `LASTFM_API_KEY` e o usuário está definido nos workflows. A chave é criada em https://www.last.fm/api/account/create.
 
 ## Títulos dos vídeos

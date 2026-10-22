@@ -284,6 +284,23 @@ class DateTests(unittest.TestCase):
         self.assertIn('src="https://example.com/cover.jpg"', pick_html)
         self.assertNotIn("<a ", pick_html)
 
+    def test_pick_shows_streaming_links_in_order(self):
+        from newsletter import generate_pick_html
+
+        html = generate_pick_html({
+            "artist": "Artist",
+            "title": "Song",
+            "links": {
+                "youtube_music": "https://music.youtube.com/watch?v=abc",
+                "spotify": "https://open.spotify.com/search/Artist%20Song",
+                "apple_music": "https://music.apple.com/us/album/x?i=1&a=2",
+            },
+        })
+
+        self.assertLess(html.index(">Spotify</a>"), html.index(">Apple Music</a>"))
+        self.assertLess(html.index(">Apple Music</a>"), html.index(">YouTube Music</a>"))
+        self.assertIn('href="https://music.apple.com/us/album/x?i=1&amp;a=2"', html)
+
     def test_pick_section_is_omitted_without_pick(self):
         from newsletter import generate_html
 
@@ -724,7 +741,8 @@ class SongOfTheWeekTests(unittest.TestCase):
 
         with patch.dict("os.environ", {"LASTFM_API_KEY": "key"}), \
             patch.object(song_of_the_week.lastfm, "get_top_tracks", side_effect=top_tracks), \
-            patch.object(song_of_the_week.lastfm, "get_track_info", return_value={"album": "Record", "image": "https://example.com/c.jpg"}):
+            patch.object(song_of_the_week.lastfm, "get_track_info", return_value={"album": "Record", "image": "https://example.com/c.jpg"}), \
+            patch.object(song_of_the_week, "get_streaming_links", return_value={"spotify": "https://s"}):
             pick = song_of_the_week.get_song_of_the_week("user", self.history_path)
 
         self.assertEqual(pick, {
@@ -732,6 +750,7 @@ class SongOfTheWeekTests(unittest.TestCase):
             "title": "Monthly",
             "album": "Record",
             "image": "https://example.com/c.jpg",
+            "links": {"spotify": "https://s"},
         })
 
     def test_lastfm_failure_does_not_block_the_newsletter(self):
@@ -746,7 +765,8 @@ class SongOfTheWeekTests(unittest.TestCase):
 
         with patch.dict("os.environ", {"LASTFM_API_KEY": "key"}), \
             patch.object(song_of_the_week.lastfm, "get_top_tracks", return_value=[self.track("New")]), \
-            patch.object(song_of_the_week.lastfm, "get_track_info", side_effect=RuntimeError("404")):
+            patch.object(song_of_the_week.lastfm, "get_track_info", side_effect=RuntimeError("404")), \
+            patch.object(song_of_the_week, "get_streaming_links", return_value={}):
             pick = song_of_the_week.get_song_of_the_week("user", self.history_path)
 
         self.assertEqual(pick["title"], "New")
@@ -1031,6 +1051,83 @@ class GenreTests(unittest.TestCase):
         self.assertEqual(format_genre("indie rock"), "Indie rock")
         self.assertEqual(format_genre("r&b"), "R&B")
         self.assertEqual(format_genre("alt-country"), "Alt-country")
+
+
+
+class StreamingLinksTests(unittest.TestCase):
+    def response(self, data):
+        from unittest.mock import Mock
+
+        return Mock(json=Mock(return_value=data), raise_for_status=Mock())
+
+    def test_apple_music_ignores_other_versions_and_artists(self):
+        import streaming_links
+
+        results = {"results": [
+            {"artistName": "A$AP Rocky", "trackName": "Life Is", "trackViewUrl": "https://wrong"},
+            {"artistName": "Jessica Pratt", "trackName": "Life Is (Live)", "trackViewUrl": "https://live"},
+            {"artistName": "Jessica Pratt", "trackName": "Life Is (feat. Someone)", "trackViewUrl": "https://studio"},
+        ]}
+
+        with patch.object(streaming_links.requests, "get", return_value=self.response(results)):
+            self.assertEqual(streaming_links.find_apple_music("Jessica Pratt", "Life Is"), "https://studio")
+
+        with patch.object(streaming_links.requests, "get", return_value=self.response({"results": results["results"][:2]})):
+            self.assertIsNone(streaming_links.find_apple_music("Jessica Pratt", "Life Is"))
+
+    def test_apple_music_removes_tracking_parameter(self):
+        import streaming_links
+
+        results = {"results": [{
+            "artistName": "Jessica Pratt",
+            "trackName": "Life Is",
+            "trackViewUrl": "https://music.apple.com/us/album/life-is/1?i=2&uo=4",
+        }]}
+
+        with patch.object(streaming_links.requests, "get", return_value=self.response(results)):
+            self.assertEqual(
+                streaming_links.find_apple_music("Jessica Pratt", "Life Is"),
+                "https://music.apple.com/us/album/life-is/1?i=2",
+            )
+
+    def test_youtube_music_only_accepts_topic_channel(self):
+        import streaming_links
+
+        items = {"items": [
+            {"id": {"videoId": "fan"}, "snippet": {"channelTitle": "Some Fan", "title": "Life Is"}},
+            {"id": {"videoId": "official"}, "snippet": {"channelTitle": "Jessica Pratt - Topic", "title": "Life Is"}},
+        ]}
+
+        with patch.dict("os.environ", {"YOUTUBE_API_KEY": "key"}), \
+            patch.object(streaming_links.requests, "get", return_value=self.response(items)):
+            self.assertEqual(
+                streaming_links.find_youtube_music("Jessica Pratt", "Life Is"),
+                "https://music.youtube.com/watch?v=official",
+            )
+
+    def test_failures_fall_back_to_search_links(self):
+        import streaming_links
+
+        with patch.object(streaming_links, "find_apple_music", side_effect=RuntimeError("offline")), \
+            patch.object(streaming_links, "find_youtube_music", return_value=None):
+            links = streaming_links.get_streaming_links("Jessica Pratt", "Life Is")
+
+        self.assertEqual(links, {
+            "spotify": "https://open.spotify.com/search/Jessica%20Pratt%20Life%20Is",
+            "apple_music": "https://music.apple.com/search?term=Jessica+Pratt+Life+Is",
+            "youtube_music": "https://music.youtube.com/search?q=Jessica+Pratt+Life+Is",
+        })
+
+    def test_direct_links_replace_search_links(self):
+        import streaming_links
+
+        with patch.object(streaming_links, "find_apple_music", return_value="https://apple"), \
+            patch.object(streaming_links, "find_youtube_music", return_value="https://ytm"):
+            links = streaming_links.get_streaming_links("Artist", "Song")
+
+        self.assertEqual(links["apple_music"], "https://apple")
+        self.assertEqual(links["youtube_music"], "https://ytm")
+        self.assertTrue(links["spotify"].startswith("https://open.spotify.com/search/"))
 
 
 if __name__ == "__main__":
