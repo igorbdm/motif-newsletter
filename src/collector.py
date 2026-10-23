@@ -8,6 +8,7 @@ from utils import parse_date
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 API_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
 VIDEO_API_URL = "https://www.googleapis.com/youtube/v3/videos"
+DURATION_PATTERN = re.compile(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?")
 
 
 def contains_any(text, terms):
@@ -45,34 +46,19 @@ def fetch_playlist_page(playlist_id, page_token=None):
 
 
 def parse_duration(duration):
-    """Converte uma duração ISO 8601 do YouTube em segundos."""
-    if not duration.startswith("PT"):
+    """Converte uma duração ISO 8601 do YouTube em segundos.
+
+    Aceita o formato completo (ex.: "P1DT2H3M4S") e também "P0D",
+    que o YouTube retorna para lives em andamento e estreias agendadas.
+    """
+    match = DURATION_PATTERN.fullmatch(duration)
+
+    if not match or duration in ("P", "PT") or duration.endswith("T"):
         raise ValueError(f"Duração ISO 8601 inválida: {duration}")
 
-    total_seconds = 0
-    number = ""
+    days, hours, minutes, seconds = (int(value or 0) for value in match.groups())
 
-    for char in duration[2:]:
-        if char.isdigit():
-            number += char
-            continue
-
-        if not number or char not in "HMS":
-            raise ValueError(f"Duração ISO 8601 inválida: {duration}")
-
-        if char == "H":
-            total_seconds += int(number) * 3600
-        elif char == "M":
-            total_seconds += int(number) * 60
-        else:
-            total_seconds += int(number)
-
-        number = ""
-
-    if number:
-        raise ValueError(f"Duração ISO 8601 inválida: {duration}")
-
-    return total_seconds
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
 def fetch_video_durations(video_ids):
